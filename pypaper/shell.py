@@ -187,7 +187,7 @@ class Shell(Cmd):
                 if f.stem == entry["ID"]:
                     file_ = 'pdf'
 
-            print(f'{id_:<4}[{file_}]: {entry["ID"]} - {entry["title"]}')
+            print(f'{id_:<4}[{file_}]: {entry["ID"]}')
 
 
     def do_open(self, args):

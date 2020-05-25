@@ -29,7 +29,7 @@ DEFAULT = {
     'General': {
         'path': str(HOME / 'pypapers'),
         'viewer': 'okular',
-        'title include': 15,
+        'title include': 0,
     },
 }
 
