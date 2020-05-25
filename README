@@ -1,0 +1,25 @@
+pypaper
+=========
+
+feature list
+-------------
+
+* stuff
+
+simple example
+---------------
+
+
+.. code-block:python
+
+   import dasst
+
+
+to install
+-----------------
+
+.. code-block:bash
+
+   pip install dasst
+
+
