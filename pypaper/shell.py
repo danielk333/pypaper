@@ -4,9 +4,15 @@ import os
 import pathlib
 import subprocess
 import re
+import string
 
 from . import config
 from . import bib
+
+try:
+    from . import doc
+except ImportError:
+    doc = None
 
 class Shell(Cmd):
 
@@ -79,6 +85,43 @@ class Shell(Cmd):
              print(f'{id_:<4}: {file.parts[-1]}')
 
 
+    def do_viewpdf(self, args):
+        '''Views an picked up document'''
+        if self.new_links is None:
+            print('Nothing has been picked up')
+            return
+
+        subprocess.run(
+            [config.config['General']['viewer'], str(self.new_links[int(args)])],
+            stdout=subprocess.DEVNULL,
+        )
+
+    def do_view(self, args):
+        '''Views an picked up document'''
+        if self.new_links is None:
+            print('Nothing has been picked up')
+            return
+
+        if doc is None:
+            subprocess.run(
+                [config.config['General']['viewer'], str(self.new_links[int(args)])],
+                stdout=subprocess.DEVNULL,
+            )
+        else:
+            lines = doc.parse_pdf(self.new_links[int(args)])
+            title = string.capwords(lines[0])
+            print(title)
+            print('='*len(title))
+            for i in range(10):
+                print(lines[i])
+
+
+    def do_trash(self, args):
+        '''Moves a document to trash folder in database'''
+        os.rename(self.new_links[int(args)], config.TRASH_FOLDER / self.new_links[int(args)].name)
+        del self.new_links[int(args)]
+
+
     def do_bib(self, args):
         '''Lists all loaded bibtex entries in database'''
 
@@ -120,6 +163,7 @@ class Shell(Cmd):
         bib_, doc_ = [int(arg) for arg in args.strip().split(' ')]
         id_ = self.current_bibtex[bib_]
         os.rename(self.new_links[doc_], config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf')
+        del self.new_links[doc_]
 
 
     def setup(self):

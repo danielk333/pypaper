@@ -10,9 +10,9 @@ with open('requirements', 'r') as fh:
 
 setuptools.setup(
     name='pypaper',
-    version='0.0.0',
+    version='0.1.0',
     long_description=long_description,
-    url='https://gitlab.irf.se/danielk/dasst',
+    url='https://github.com/danielk333/pypaper',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: GNU-GPLv3',

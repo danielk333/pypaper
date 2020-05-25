@@ -46,6 +46,7 @@ DATA_FOLDER = pathlib.Path(config['General']['path'])
 PICKUP_FOLDER = DATA_FOLDER / 'PICKUP'
 BIB_FILE = DATA_FOLDER / 'references.bib'
 PAPERS_FOLDER = DATA_FOLDER / 'PAPERS'
+TRASH_FOLDER = DATA_FOLDER / 'TRASH'
 
 if not BIB_FILE.exists():
   BIB_FILE.touch()
@@ -53,3 +54,4 @@ if not BIB_FILE.exists():
 DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 PICKUP_FOLDER.mkdir(exist_ok=True)
 PAPERS_FOLDER.mkdir(exist_ok=True)
+TRASH_FOLDER.mkdir(exist_ok=True)
