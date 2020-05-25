@@ -47,7 +47,7 @@ class Shell(Cmd):
             if _skip > 0:
                 print('Skipped {} duplicates'.format(_skip))
             print('Added {} entires'.format(_add))
-            os.remove(b_path)
+            os.rename(b_path, config.TRASH_FOLDER / b_path.name)
 
         if len(docs) == 0 and len(bibs) == 0:
             print('Pickup folder empty')
@@ -58,6 +58,31 @@ class Shell(Cmd):
     def do_save(self, args):
         '''Save bibtex file'''
         bib.save_bibtex(config.BIB_FILE, self.bibtex)
+
+
+    def do_bibrm(self, args):
+        '''Remove bibtex entry'''
+        del self.bibtex.entries[self.current_bibtex[int(args)]]
+        self.do_save('')
+
+
+    def do_bibview(self, args):
+        '''View bibtex entry'''
+        id_ = self.current_bibtex[int(args)]
+        entry = self.bibtex.entries[id_]
+        print(config.Terminal.PURPLE + entry['ID'] +  config.Terminal.END)
+        for key in entry:
+            print(f'- {key}: {entry[key]}')
+
+
+    def do_stat(self, args):
+        '''Display current statistics'''
+        print(f'{len(self.bibtex.entries)} bibtex entries loaded')
+        print(f'{len(self.current_bibtex)} entires in current list')
+        if self.new_links is not None:
+            print(f'{len(self.new_links)} picked up documents to link')
+        if self.docs is not None:
+            print(f'{len(self.docs)} documents in database')
 
 
     def do_load(self, args):
@@ -126,14 +151,34 @@ class Shell(Cmd):
         '''Lists all loaded bibtex entries in database'''
 
         if len(args) > 0:
-            arg_list = [arg.split('=') for arg in args.split(' ')]
+            if args[0] == '&' or args[0] == '|':
+                operator = args[0]
+                del args[0]
+            else:
+                operator = '&'
+
+            arg_list = [[arg_id] + arg.split('=') for arg_id, arg in enumerate(args.split(' '))]
             self.current_bibtex = []
             for id_,entry in enumerate(self.bibtex.entries):
-                add_ = False
-                for key, pattern in arg_list:
-                    add_ = add_ or re.search(pattern, entry[key]) is not None
+                for arg_id, key, pattern in arg_list:
+                    resh = re.search(pattern, entry[key])
+                    if arg_id == 0:
+                        add_ = resh is not None
+                    else:
+                        if operator == '&':
+                            add_ = add_ and resh is not None
+                        elif operator == '|':
+                            add_ = add_ or resh is not None
+
                 if add_:
                     self.current_bibtex.append(id_)
+        else:
+            if len(self.current_bibtex) == 0:
+                if len(self.bibtex.entries) > 20:
+                    self.current_bibtex = list(range(20))
+                else:
+                    self.current_bibtex = list(range(len(self.bibtex.entries)))
+
 
         for id_, cid_ in enumerate(self.current_bibtex):
             entry = self.bibtex.entries[cid_]

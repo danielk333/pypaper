@@ -4,7 +4,7 @@ from bibtexparser.bparser import BibTexParser
 from . import config
 
 def load_bibtex(path):
-    parser = BibTexParser()
+    parser = BibTexParser(common_strings=True)
     parser.ignore_nonstandard_types = False
     parser.homogenise_fields = False
 
@@ -32,14 +32,21 @@ def rename_bibtex(bib_database):
 
         title_str = entry['title'].replace('{','')
         title_str = title_str.replace('}','').strip()
-        title_str = title_str.replace(' ','')
+        title_str = title_str.replace(' ','_')
         if len(title_str) > tlen_:
             title_str = title_str[:tlen_]
 
-        new_id = _format_author(entry['author'])\
-                    + str(entry['year'])\
+        if 'year' in entry:
+            year_str = str(entry['year'])
+        else:
+            year_str = 'yyyy'
+
+        author_str = _format_author(entry['author'])
+
+        new_id = author_str\
+                    + year_str\
                     + title_str
-        new_id = ''.join(e for e in new_id if e.isalnum())
+        new_id = ''.join(e for e in new_id if e.isalnum() or e == '_')
 
         entry['ID'] = new_id
 
