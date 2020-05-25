@@ -3,6 +3,7 @@ from glob import glob
 import os
 import pathlib
 import subprocess
+import re
 
 from . import config
 from . import bib
@@ -42,7 +43,10 @@ class Shell(Cmd):
             print('Added {} entires'.format(_add))
             os.remove(b_path)
 
-        self.do_save('')
+        if len(docs) == 0 and len(bibs) == 0:
+            print('Pickup folder empty')
+        else:
+            self.do_save('')
 
 
     def do_save(self, args):
@@ -54,7 +58,12 @@ class Shell(Cmd):
         '''Load bibtex file and list of papers'''
         self.bibtex = bib.load_bibtex(config.BIB_FILE)
         bib.rename_bibtex(self.bibtex)
-        print('Bib load: {} entires loaded'.format(len(self.bibtex.entries)))
+        if len(self.bibtex.entries) > 20:
+            self.current_bibtex = list(range(20))
+        else:
+            self.current_bibtex = list(range(len(self.bibtex.entries)))
+
+        print('Bib load: {} entries loaded'.format(len(self.bibtex.entries)))
         self.docs = glob(str(config.PAPERS_FOLDER / '*.pdf'))
         self.docs = [pathlib.Path(p) for p in self.docs]
 
@@ -63,13 +72,28 @@ class Shell(Cmd):
 
     def do_list(self, args):
         '''Lists all unlinked documents in pickup'''
+        if self.new_links is None:
+            print('Nothing has been picked up')
+            return
         for id_,file in enumerate(self.new_links):
              print(f'{id_:<4}: {file.parts[-1]}')
 
 
     def do_bib(self, args):
-        '''Lists all loaded bibtex entires in database'''
-        for id_, entry in enumerate(self.bibtex.entries):
+        '''Lists all loaded bibtex entries in database'''
+
+        if len(args) > 0:
+            arg_list = [arg.split('=') for arg in args.split(' ')]
+            self.current_bibtex = []
+            for id_,entry in enumerate(self.bibtex.entries):
+                add_ = False
+                for key, pattern in arg_list:
+                    add_ = add_ or re.search(pattern, entry[key]) is not None
+                if add_:
+                    self.current_bibtex.append(id_)
+
+        for id_, cid_ in enumerate(self.current_bibtex):
+            entry = self.bibtex.entries[cid_]
             file_ = '   '
             for f in self.docs:
                 if f.stem == entry["ID"]:
@@ -80,23 +104,29 @@ class Shell(Cmd):
 
     def do_open(self, args):
         '''Opens paper linked to bibtex entry'''
-        fname = config.PAPERS_FOLDER / f'{self.bibtex.entries[int(args)]["ID"]}.pdf'
-        subprocess.run(
-            [config.config['General']['viewer'], fname],
-            stdout=subprocess.DEVNULL,
-        )
+        id_ = self.current_bibtex[int(args)]
+        fname = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
+        if fname.exists():
+            subprocess.run(
+                [config.config['General']['viewer'], fname],
+                stdout=subprocess.DEVNULL,
+            )
+        else:
+            print('No pdf linked to this entry')
 
 
     def do_link(self, args):
         '''Link bibtex entry with picked up document'''
         bib_, doc_ = [int(arg) for arg in args.strip().split(' ')]
-        os.rename(self.new_links[doc_], config.PAPERS_FOLDER / f'{self.bibtex.entries[bib_]["ID"]}.pdf')
+        id_ = self.current_bibtex[bib_]
+        os.rename(self.new_links[doc_], config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf')
 
 
     def setup(self):
         self.bibtex = None
         self.docs = None
         self.new_links = None
+        self.current_bibtex = None
 
 
     def do_exit(self, args):
