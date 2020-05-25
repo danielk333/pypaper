@@ -33,8 +33,9 @@ def rename_bibtex(bib_database):
         title_str = entry['title'].replace('{','')
         title_str = title_str.replace('}','').strip()
         title_str = title_str.replace(' ','_')
-        if len(title_str) > tlen_:
-            title_str = title_str[:tlen_]
+        if tlen_ > 0:
+            if len(title_str) > tlen_:
+                title_str = title_str[:tlen_]
 
         if 'year' in entry:
             year_str = str(entry['year'])
