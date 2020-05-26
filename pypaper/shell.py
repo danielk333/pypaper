@@ -39,6 +39,9 @@ class Shell(Cmd):
                 for entry in self.bibtex.entries:
                     if in_entry['ID'] == entry['ID']:
                         _exists = True
+                    if in_entry['title'] == entry['title']:
+                        _exists = True
+
                 if not _exists:
                     self.bibtex.entries.append(in_entry)
                     _add += 1
@@ -156,16 +159,18 @@ class Shell(Cmd):
             operators = all_args[1::2]
             self.current_bibtex = []
             for id_,entry in enumerate(self.bibtex.entries):
+                add_ = None
                 for arg_id, key, pattern in arg_list:
-                    resh = re.search(pattern, entry[key])
-                    if arg_id == 0:
-                        add_ = resh is not None
-                    else:
-                        operator = operators[arg_id-1]
-                        if operator == '&':
-                            add_ = add_ and resh is not None
-                        elif operator == '|':
-                            add_ = add_ or resh is not None
+                    if key in entry:
+                        resh = re.search(pattern, entry[key])
+                        if add_ is None:
+                            add_ = resh is not None
+                        else:
+                            operator = operators[arg_id-1]
+                            if operator == '&':
+                                add_ = add_ and resh is not None
+                            elif operator == '|':
+                                add_ = add_ or resh is not None
 
                 if add_:
                     self.current_bibtex.append(id_)
