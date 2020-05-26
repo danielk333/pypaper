@@ -5,6 +5,7 @@ import pathlib
 import subprocess
 import re
 import string
+import bibtexparser
 
 from . import config
 from . import bib
@@ -76,6 +77,19 @@ class Shell(Cmd):
         print(config.Terminal.PURPLE + entry['ID'] +  config.Terminal.END)
         for key in entry:
             print(f'- {key}: {entry[key]}')
+
+    def do_clip(self, args):
+        '''Copy bibtex entry to clipboard'''
+        id_ = self.current_bibtex[int(args)]
+        entry = self.bibtex.entries[id_]
+
+        bib_database = bibtexparser.bibdatabase.BibDatabase()
+        bib_database.entries = [entry]
+
+        data = bibtexparser.dumps(bib_database)
+        cmd = ['xsel','-b','-i']
+        subprocess.run(cmd, universal_newlines=True, input=data)
+        print('Copied to clipboard')
 
 
     def do_stat(self, args):
@@ -231,6 +245,8 @@ class Shell(Cmd):
         self.do_save('')
         raise SystemExit
 
+
+Shell.do_bw = Shell.do_bibview
 
 def run():
     prompt = Shell()
