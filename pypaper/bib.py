@@ -42,7 +42,14 @@ def rename_bibtex(bib_database):
         else:
             year_str = 'yyyy'
 
-        author_str = _format_author(entry['author'])
+        if 'author' in entry:
+            author_str = _format_author(entry['author'])
+        elif 'institution' in entry:
+            author_str = entry['institution'].replace(' ', '_').strip()
+        elif 'publisher' in entry:
+            author_str = entry['publisher'].replace(' ', '_').strip()
+        else:
+            author_str = 'unknown'
 
         new_id = author_str\
                     + year_str\
