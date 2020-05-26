@@ -1,25 +1,32 @@
 pypaper
 =========
 
-feature list
+Feature list
 -------------
 
 * stuff
 
-simple example
+To run
 ---------------
 
+.. code-block:: bash
 
-.. code-block:python
-
-   import dasst
+   pypaper
 
 
-to install
+To install
 -----------------
 
-.. code-block:bash
+.. code-block:: bash
 
-   pip install dasst
+   pip install git+https://github.com/danielk333/pypaper
+
+or 
+
+.. code-block:: bash
+
+   git clone https://github.com/danielk333/pypaper
+   cd pypaper
+   pip install .
 
 
