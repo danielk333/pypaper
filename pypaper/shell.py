@@ -1,3 +1,5 @@
+
+#Python standard
 from cmd import Cmd
 from glob import glob
 import os
@@ -5,8 +7,12 @@ import pathlib
 import subprocess
 import re
 import string
-import bibtexparser
 
+#Third party
+import bibtexparser
+import inquirer
+
+#Local
 from . import config
 from . import bib
 
@@ -17,13 +23,18 @@ except ImportError:
 
 class Shell(Cmd):
 
-
-    def do_pickup(self, args):
-        '''Pickup bibtex files and pdf files to add to database'''
+    def do_docpickup(self, args):
+        '''pdf files to add to database'''
         docs = glob(str(config.PICKUP_FOLDER / '*.pdf'))
         docs = [pathlib.Path(p) for p in docs]
 
         self.new_links = docs
+
+
+    def do_pickup(self, args):
+        '''Pickup bibtex files and pdf files to add to database'''
+
+        self.do_docpickup('')
 
         bibs = glob(str(config.PICKUP_FOLDER / '*.bib'))
         bibs = [pathlib.Path(p) for p in bibs]
@@ -76,7 +87,7 @@ class Shell(Cmd):
         entry = self.bibtex.entries[id_]
         print(config.Terminal.PURPLE + entry['ID'] +  config.Terminal.END)
         for key in entry:
-            print(f'- {key}: {entry[key]}')
+            print(f'- {config.Terminal.BOLD + key + config.Terminal.END}: {entry[key]}')
 
     def do_id(self, args):
         '''Copy bibtex entry to clipboard'''
@@ -140,6 +151,10 @@ class Shell(Cmd):
 
     def do_viewpdf(self, args):
         '''Views an picked up document'''
+        if not args.strip().isnumeric():
+            print('No valid document index given')
+            return
+
         if self.new_links is None:
             print('Nothing has been picked up')
             return
@@ -151,6 +166,10 @@ class Shell(Cmd):
 
     def do_view(self, args):
         '''Views an picked up document'''
+        if not args.strip().isnumeric():
+            print('No valid document index given')
+            return
+
         if self.new_links is None:
             print('Nothing has been picked up')
             return
@@ -251,6 +270,10 @@ class Shell(Cmd):
 
     def do_open(self, args):
         '''Opens paper linked to bibtex entry'''
+        if not args.strip().isnumeric():
+            print('No valid bibtex index given')
+            return
+
         id_ = self.current_bibtex[int(args)]
         fname = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
         if fname.exists():
@@ -264,10 +287,35 @@ class Shell(Cmd):
 
     def do_link(self, args):
         '''Link bibtex entry with picked up document'''
-        bib_, doc_ = [int(arg) for arg in args.strip().split(' ')]
-        id_ = self.current_bibtex[bib_]
-        os.rename(self.new_links[doc_], config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf')
-        del self.new_links[doc_]
+        if not args.strip().isnumeric():
+            print('No valid bibtex index given')
+            return
+
+        self.do_docpickup('')
+        id_ = self.current_bibtex[int(args)]
+
+        print(f'Bibtex entry: {config.Terminal.PURPLE + self.bibtex.entries[id_]["ID"] +  config.Terminal.END}')
+        for key in ['title','author','year']:
+            if key in self.bibtex.entries[id_]:
+                print(f'{key}: {self.bibtex.entries[id_][key]}')
+        opts_ = [file.name for file in self.new_links]
+        questions = [
+            inquirer.List('pdf',
+                message='Shall be linked with which PDF?',
+                choices=opts_ + ['NONE'],
+                carousel=True,
+            ),
+        ]
+        answers = inquirer.prompt(questions)
+        answer = answers['pdf']
+        if answers == 'NONE':
+            print('No PDF linked')
+            return
+        else:
+            new_path = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
+            os.rename(self.new_links[opts_.index(answer)], new_path)
+            del self.new_links[opts_.index(answer)]
+            print(f'{config.Terminal.GREEN + new_path.name + config.Terminal.END} added to paper database')
 
 
     def setup(self):
