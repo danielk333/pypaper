@@ -21,6 +21,11 @@ try:
 except ImportError:
     doc = None
 
+try:
+    from . import ads
+except Exception:
+    ads = None
+
 class Shell(Cmd):
 
     def do_docpickup(self, args):
@@ -316,6 +321,78 @@ class Shell(Cmd):
             os.rename(self.new_links[opts_.index(answer)], new_path)
             del self.new_links[opts_.index(answer)]
             print(f'{config.Terminal.GREEN + new_path.name + config.Terminal.END} added to paper database')
+
+
+    def do_ads(self, args):
+        '''Do a search query on the Harvard ADS database and add selected papers to the database. Download PDFs if possible'''
+
+        if ads is None:
+            print('ADS interface import failed')
+            return 
+
+        if len(args) == 0:
+            print('No search query given')
+            return 
+
+        arg_dict = {}
+        find_ret = 0
+        find_pos = 0
+        while True:
+            eq_pos = args.find('=', find_pos)
+            if eq_pos == -1:
+                break
+            key = args[find_pos:eq_pos].strip()
+            if eq_pos+1 >= len(args):
+                break
+
+            if args[eq_pos+1] in ['"', "'"]:
+                find_pos = args.find(args[eq_pos+1], eq_pos+2)
+                if find_pos == -1:
+                    raise Exception('No closing quotation mark on pattern')
+                pattern = args[(eq_pos+2):find_pos]
+            else:
+                find_pos = args.find(' ', eq_pos)
+                if find_pos == -1:
+                    find_pos = len(args)
+                pattern = args[(eq_pos+1):find_pos]
+
+            arg_dict[key] = pattern
+
+            if find_pos+1 >= len(args):
+                break
+
+        res_ = ads.get_bibtex_from_ADS(arg_dict)
+        if res_ is None:
+            return
+        else:
+            bib_database, bibcodes = res_
+
+        bib.rename_bibtex(bib_database)
+        #add non-duplicates
+        _add = 0
+        _skip = 0
+        for in_entry in bib_database.entries:
+            _exists = False
+            for entry in self.bibtex.entries:
+                if in_entry['ID'] == entry['ID']:
+                    _exists = True
+                if in_entry['title'] == entry['title']:
+                    _exists = True
+
+            if not _exists:
+                self.bibtex.entries.append(in_entry)
+                _add += 1
+            else:
+                _skip += 1
+        if _skip > 0:
+            print('Skipped {} duplicates'.format(_skip))
+        print('Added {} entires'.format(_add))
+
+        self.do_save('')
+
+        ads.get_PDF_from_ADS(bibcodes, [entry['ID'] for entry in bib_database.entries])
+
+        self.do_load('')
 
 
     def setup(self):

@@ -31,6 +31,10 @@ DEFAULT = {
         'viewer': 'okular',
         'title include': 0,
     },
+    'ADS': {
+        'token': 'place your personal token here',
+        'max results': 20,
+    },
 }
 
 config.read_dict(DEFAULT)
