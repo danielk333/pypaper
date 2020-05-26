@@ -78,6 +78,17 @@ class Shell(Cmd):
         for key in entry:
             print(f'- {key}: {entry[key]}')
 
+    def do_id(self, args):
+        '''Copy bibtex entry to clipboard'''
+        id_ = self.current_bibtex[int(args)]
+        entry = self.bibtex.entries[id_]
+
+        data = entry['ID']
+        cmd = ['xsel','-b','-i']
+        subprocess.run(cmd, universal_newlines=True, input=data)
+        print('Copied ID to clipboard')
+
+
     def do_clip(self, args):
         '''Copy bibtex entry to clipboard'''
         id_ = self.current_bibtex[int(args)]
@@ -89,7 +100,7 @@ class Shell(Cmd):
         data = bibtexparser.dumps(bib_database)
         cmd = ['xsel','-b','-i']
         subprocess.run(cmd, universal_newlines=True, input=data)
-        print('Copied to clipboard')
+        print('Copied bibtex entry to clipboard')
 
 
     def do_stat(self, args):
