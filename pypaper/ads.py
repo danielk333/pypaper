@@ -75,32 +75,36 @@ def get_PDF_from_ADS(bibcodes, bib_ids):
         if paper_path.exists():
             continue
 
-        cmd = ['curl',
-            '-H',
-            f'Authorization: Bearer {config.config["ADS"]["token"]}',
-            f'https://ui.adsabs.harvard.edu/link_gateway/{bibcode}/ADS_PDF',
-            '-L',
-            '-o',
-            str(paper_path),
-        ]
-        subprocess.run(cmd)
+        sources = ['EPRINT_PDF', 'ADS_PDF', 'PUB_PDF']
+        for source in sources:
+            cmd = ['curl',
+                '-H',
+                f'Authorization: Bearer {config.config["ADS"]["token"]}',
+                f'https://ui.adsabs.harvard.edu/link_gateway/{bibcode}/{source}',
+                '-L',
+                '-o',
+                str(paper_path),
+            ]
+            subprocess.run(cmd)
 
-        print('First lines of content:')
-        lines = 0
-        with open(paper_path, 'r') as f:
-            for line in f:
-                print(line.strip())
-                lines += 1
-                if lines > 10:
-                    break
+            lines = 0
+            keep_ = True
+            try:
+                with open(paper_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if lines == 4:
+                            if line.strip() == '<title>Error</title>':
+                                keep_ = False
+                            break
+                        lines += 1
+            except UnicodeDecodeError:
+                pass
 
-        questions = [
-            inquirer.List('keep',
-                message="Keep the file?",
-                choices=['Yes', 'No'],
-            ),
-        ]
-        answers = inquirer.prompt(questions)
-
-        if answers['keep'] == 'No':
-            os.remove(paper_path)
+            if keep_:
+                break
+            else:
+                os.remove(paper_path)
+        if keep_:
+            print('PDF found and saved to database')
+        else:
+            print('No PDF source was available')
