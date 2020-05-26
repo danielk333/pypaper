@@ -177,11 +177,42 @@ class Shell(Cmd):
 
     def do_bib(self, args):
         '''Lists all loaded bibtex entries in database'''
+        args = args.strip()
 
         if len(args) > 0:
-            all_args = args.split(' ')
-            arg_list = [[arg_id] + arg.split('=') for arg_id, arg in enumerate(all_args[::2])]
-            operators = all_args[1::2]
+            arg_list = []
+            operators = []
+            find_ret = 0
+            find_pos = 0
+            while True:
+                eq_pos = args.find('=', find_pos)
+                if eq_pos == -1:
+                    break
+                key = args[find_pos:eq_pos].strip()
+                if eq_pos+1 >= len(args):
+                    arg_list.append([len(arg_list), key, ''])
+                    break
+
+                if args[eq_pos+1] in ['"', "'"]:
+                    find_pos = args.find(args[eq_pos+1], eq_pos+2)
+                    if find_pos == -1:
+                        raise Exception('No closing quotation mark on pattern')
+                    pattern = args[(eq_pos+2):find_pos]
+                    find_pos += 1
+                else:
+                    find_pos = args.find(' ', eq_pos)
+                    if find_pos == -1:
+                        find_pos = len(args)
+                    pattern = args[(eq_pos+1):find_pos]
+
+                arg_list.append([len(arg_list), key, pattern])
+
+                if find_pos+1 >= len(args):
+                    break
+                else:
+                    operators.append(args[find_pos+1])
+                    find_pos += 3
+
             self.current_bibtex = []
             for id_,entry in enumerate(self.bibtex.entries):
                 add_ = None
@@ -196,7 +227,8 @@ class Shell(Cmd):
                                 add_ = add_ and resh is not None
                             elif operator == '|':
                                 add_ = add_ or resh is not None
-
+                if add_ is None:
+                    add_ = False
                 if add_:
                     self.current_bibtex.append(id_)
         else:
