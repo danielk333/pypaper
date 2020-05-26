@@ -151,13 +151,9 @@ class Shell(Cmd):
         '''Lists all loaded bibtex entries in database'''
 
         if len(args) > 0:
-            if args[0] == '&' or args[0] == '|':
-                operator = args[0]
-                del args[0]
-            else:
-                operator = '&'
-
-            arg_list = [[arg_id] + arg.split('=') for arg_id, arg in enumerate(args.split(' '))]
+            all_args = args.split(' ')
+            arg_list = [[arg_id] + arg.split('=') for arg_id, arg in enumerate(all_args[::2])]
+            operators = all_args[1::2]
             self.current_bibtex = []
             for id_,entry in enumerate(self.bibtex.entries):
                 for arg_id, key, pattern in arg_list:
@@ -165,6 +161,7 @@ class Shell(Cmd):
                     if arg_id == 0:
                         add_ = resh is not None
                     else:
+                        operator = operators[arg_id-1]
                         if operator == '&':
                             add_ = add_ and resh is not None
                         elif operator == '|':
