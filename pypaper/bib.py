@@ -2,6 +2,7 @@ import pathlib
 
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
+import inquirer
 
 from . import config
 
@@ -51,6 +52,20 @@ def _clean_id(field):
 def rename_bibtex(bib_database):
     tlen_ = int(config.config['General']['title include'])
     for entry in bib_database.entries:
+
+        if 'title' not in entry:
+            print(config.Terminal.RED + 'bibtex entry title missing' + config.Terminal.END)
+            for key in entry:
+                print(f'- {config.Terminal.BOLD + key + config.Terminal.END}: {entry[key]}')
+            questions = [
+                inquirer.Text('title', message="Enter title (leave blank to skip)"),
+            ]
+            answers = inquirer.prompt(questions)
+            if len(answers['title']) > 0:
+                entry['title'] = answers['title']
+            else:
+                print('Skipping entry')
+                continue
 
         title_str = str(entry['title'])
         title_str = title_str.replace('{','').replace('}','').strip()

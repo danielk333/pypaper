@@ -136,6 +136,9 @@ class Shell(Cmd):
             #add non-duplicates
             for in_entry in b.entries:
                 _exists = False
+                if 'title' not in in_entry:
+                    continue
+
                 for entry in self.bibtex.entries:
                     if in_entry['ID'] == entry['ID']:
                         _exists = True
