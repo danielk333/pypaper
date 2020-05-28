@@ -44,12 +44,16 @@ def _format_author(auth):
     return auth_[0]
 
 
+def _clean_id(field):
+    return str(field).replace(' ', '_').strip()
+
+
 def rename_bibtex(bib_database):
     tlen_ = int(config.config['General']['title include'])
     for entry in bib_database.entries:
 
-        title_str = entry['title'].replace('{','')
-        title_str = title_str.replace('}','').strip()
+        title_str = str(entry['title'])
+        title_str = title_str.replace('{','').replace('}','').strip()
         title_str = title_str.replace(' ','_')
         if tlen_ > 0:
             if len(title_str) > tlen_:
@@ -61,11 +65,13 @@ def rename_bibtex(bib_database):
             year_str = 'yyyy'
 
         if 'author' in entry:
-            author_str = _format_author(entry['author'])
+            author_str = _format_author(str(entry['author']))
         elif 'institution' in entry:
-            author_str = entry['institution'].replace(' ', '_').strip()
+            author_str = _clean_id(entry['institution'])
         elif 'publisher' in entry:
-            author_str = entry['publisher'].replace(' ', '_').strip()
+            author_str = _clean_id(entry['publisher'])
+        elif 'editor' in entry:
+            author_str = _clean_id(entry['editor'])
         else:
             author_str = 'unknown'
 

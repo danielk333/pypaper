@@ -139,7 +139,7 @@ class Shell(Cmd):
                 for entry in self.bibtex.entries:
                     if in_entry['ID'] == entry['ID']:
                         _exists = True
-                    if in_entry['title'] == entry['title']:
+                    if str(in_entry['title']) == str(entry['title']):
                         _exists = True
 
                 if not _exists:
@@ -330,7 +330,7 @@ class Shell(Cmd):
                 add_ = None
                 for arg_id, key, pattern in arg_list:
                     if key in entry:
-                        resh = re.search(pattern, entry[key])
+                        resh = re.search(pattern, str(entry[key]))
                         if add_ is None:
                             add_ = resh is not None
                         else:
@@ -465,7 +465,7 @@ class Shell(Cmd):
             for entry in self.bibtex.entries:
                 if in_entry['ID'] == entry['ID']:
                     _exists = True
-                if in_entry['title'] == entry['title']:
+                if str(in_entry['title']) == str(entry['title']):
                     _exists = True
 
             if not _exists:
