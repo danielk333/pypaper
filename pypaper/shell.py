@@ -234,10 +234,7 @@ class Shell(Cmd):
         self.bibtex.comments = []
 
         bib.rename_bibtex(self.bibtex)
-        if len(self.bibtex.entries) > 20:
-            self.current_bibtex = list(range(20))
-        else:
-            self.current_bibtex = list(range(len(self.bibtex.entries)))
+        self.current_bibtex = []
 
         print('Bib load: {} entries loaded'.format(len(self.bibtex.entries)))
         self.docs = glob(str(config.PAPERS_FOLDER / '*.pdf'))
@@ -291,7 +288,19 @@ class Shell(Cmd):
 
 
     def do_bib(self, args):
-        '''Lists selected bibtex entries in database'''
+        '''Lists selected bibtex entries in database, syntax: --limit [int] [field]=[regex] &/| [field]=[regex]...'''
+
+        if len(args) > 0:
+            find_limit = args.find('--limit', 0)
+            if find_limit != -1:
+                find_space = args.find(' ', find_limit+8)
+                if find_space == -1:
+                    self.limit = int(args[(find_limit+8):])
+                    find_space = len(args)
+                else:
+                    self.limit = int(args[(find_limit+8):find_space])
+
+                args = args.replace(args[find_limit:find_space], '')
         args = args.strip()
 
         if len(args) > 0:
@@ -299,6 +308,7 @@ class Shell(Cmd):
             operators = []
             find_ret = 0
             find_pos = 0
+
             while True:
                 eq_pos = args.find('=', find_pos)
                 if eq_pos == -1:
@@ -346,12 +356,6 @@ class Shell(Cmd):
                     add_ = False
                 if add_:
                     self.current_bibtex.append(id_)
-        else:
-            if len(self.current_bibtex) == 0:
-                if len(self.bibtex.entries) > 20:
-                    self.current_bibtex = list(range(20))
-                else:
-                    self.current_bibtex = list(range(len(self.bibtex.entries)))
 
         strs_ = self._list_bib()
         for str_ in strs_:
@@ -359,8 +363,19 @@ class Shell(Cmd):
 
 
     def _list_bib(self):
-        strs_ = [None]*len(self.current_bibtex)
-        for id_, cid_ in enumerate(self.current_bibtex):
+        if len(self.current_bibtex) == 0:
+            if len(self.bibtex.entries) > self.limit:
+                display_bibtex = list(range(self.limit))
+            else:
+                display_bibtex = list(range(len(self.bibtex.entries)))
+        else:
+            if len(self.current_bibtex) > self.limit:
+                display_bibtex = self.current_bibtex[:self.limit]
+            else:
+                display_bibtex = self.current_bibtex
+
+        strs_ = [None]*len(display_bibtex)
+        for id_, cid_ in enumerate(display_bibtex):
             entry = self.bibtex.entries[cid_]
             file_ = '   '
             for f in self.docs:
@@ -495,7 +510,7 @@ class Shell(Cmd):
         for entry in self.bibtex.entries:
             if 'adsurl' in entry:
                 bibcode = entry['adsurl'].split('/')[-1]
-                bibcode.replace('}','')
+                bibcode = bibcode.replace('}','')
 
                 bibcodes.append(bibcode)
                 bib_ids.append(entry['ID'])
@@ -508,6 +523,7 @@ class Shell(Cmd):
         self.docs = None
         self.new_links = None
         self.current_bibtex = None
+        self.limit = 20
         self.do_docpickup('')
 
 
