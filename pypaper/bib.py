@@ -1,18 +1,36 @@
+import pathlib
+
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 
 from . import config
 
-def load_bibtex(path):
-    parser = BibTexParser(common_strings=True)
+def get_parser():
+    parser = BibTexParser(common_strings=True, interpolate_strings=False)
     parser.ignore_nonstandard_types = False
     parser.homogenise_fields = False
+    return parser
 
-    if path.stat().st_size == 0:
+
+def load_bibtex(paths):
+
+    parser = get_parser()
+
+    if isinstance(paths, pathlib.Path):
+        paths = [paths]
+
+    st_size = 0
+    for path in paths:
+        st_size += path.stat().st_size
+    if st_size == 0:
         return bibtexparser.bibdatabase.BibDatabase()
 
-    with open(path, 'r') as bibtex_file:
-        bib_database = bibtexparser.load(bibtex_file, parser)
+    bib_data = ''
+    for path in paths:
+        with open(path, 'r') as bibtex_file:
+            bib_data += bibtex_file.read()
+
+    bib_database = bibtexparser.loads(bib_data, parser)
     return bib_database
 
 

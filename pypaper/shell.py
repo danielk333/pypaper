@@ -128,9 +128,10 @@ class Shell(Cmd):
 
         for b_path in bibs:
             print('Picking up from "{}"'.format(b_path))
+        if len(bibs) > 0:
+            b = bib.load_bibtex(bibs)
             _skip = 0
-            _add = 0
-            b = bib.load_bibtex(b_path)
+            _add = 0        
             bib.rename_bibtex(b)
             #add non-duplicates
             for in_entry in b.entries:
@@ -156,8 +157,9 @@ class Shell(Cmd):
                     _add_str += 1
 
             print('Added {} entries'.format(_add))
-            print('Added {}/{} strings'.format(_add_str, len(b.strings)))
-            os.rename(b_path, config.TRASH_FOLDER / b_path.name)
+            print('Added {}/{} strings'.format(_add_str, len(b.strings) - len(bibtexparser.bibdatabase.COMMON_STRINGS)))
+            for b_path in bibs:
+                os.rename(b_path, config.TRASH_FOLDER / b_path.name)
 
         if len(self.new_links) == 0 and len(bibs) == 0:
             print('Pickup folder empty')

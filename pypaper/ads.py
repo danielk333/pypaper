@@ -3,11 +3,11 @@ import os
 
 #Third party
 import bibtexparser
-from bibtexparser.bparser import BibTexParser
 import inquirer
 import ads
 
 from . import config
+from . import bib
 
 ads.config.token = config.config['ADS']['token']
 
@@ -53,9 +53,7 @@ def get_bibtex_from_ADS(arg_dict):
     papers = save_papers
     del save_papers
 
-    parser = BibTexParser(common_strings=True)
-    parser.ignore_nonstandard_types = False
-    parser.homogenise_fields = False
+    parser = bib.get_parser()
 
     bibcodes = [paper.bibcode for paper in papers]
 
