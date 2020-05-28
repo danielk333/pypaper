@@ -148,7 +148,15 @@ class Shell(Cmd):
                     _skip += 1
             if _skip > 0:
                 print('Skipped {} duplicates'.format(_skip))
+
+            _add_str = 0
+            for key in b.strings:
+                if key not in self.bibtex.strings:
+                    self.bibtex.strings[key] = b.strings[key]
+                    _add_str += 1
+
             print('Added {} entries'.format(_add))
+            print('Added {}/{} strings'.format(_add_str, len(b.strings)))
             os.rename(b_path, config.TRASH_FOLDER / b_path.name)
 
         if len(self.new_links) == 0 and len(bibs) == 0:
@@ -217,6 +225,9 @@ class Shell(Cmd):
     def do_load(self, args):
         '''Load bibtex file and list of papers'''
         self.bibtex = bib.load_bibtex(config.BIB_FILE)
+
+        self.bibtex.comments = []
+
         bib.rename_bibtex(self.bibtex)
         if len(self.bibtex.entries) > 20:
             self.current_bibtex = list(range(20))
