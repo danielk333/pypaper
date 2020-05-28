@@ -26,6 +26,88 @@ try:
 except Exception:
     ads = None
 
+
+def doc_index_arg_check(func):
+    def checked_func(self, args):
+        if self.new_links is None:
+            print('Nothing has been picked up')
+            return
+        if len(self.new_links) == 0:
+            print('Nothing has been picked up')
+            return
+
+        if len(args) == 0:
+            opts_ = [file.name for file in self.new_links]
+
+            questions = [
+                inquirer.List('doc',
+                    message='Which picked up document?',
+                    choices=opts_ + ['NONE'],
+                    carousel=True,
+                ),
+            ]
+            answers = inquirer.prompt(questions)
+            answer = answers['doc']
+            if answer == 'NONE':
+                print('No document chosen')
+                return
+            else:
+                args = str(opts_.index(answer))
+
+        elif not args.strip().isnumeric():
+            print('No valid document index given')
+            return
+
+        return func(self, args)
+    checked_func.__doc__ = func.__doc__
+    return checked_func
+
+
+
+def bib_index_arg_check(func):
+    def checked_func(self, args):
+        if self.bibtex is None:
+            print('No bibtex loaded')
+            return
+        if len(self.bibtex.entries) == 0:
+            print('No bibtex entries loaded')
+            return
+
+        if len(args) == 0:
+            opts_ = self._list_bib()
+
+            questions = [
+                inquirer.List('bib',
+                    message='Which bibtex entry?',
+                    choices=opts_ + ['NONE'],
+                    carousel=True,
+                ),
+            ]
+            answers = inquirer.prompt(questions)
+            answer = answers['bib']
+            if answer == 'NONE':
+                print('No bibtex entry chosen')
+                return
+            else:
+                args = str(opts_.index(answer))
+
+        elif not args.strip().isnumeric():
+            print('No valid document index given')
+            return
+
+        return func(self, args)
+    checked_func.__doc__ = func.__doc__
+    return checked_func
+
+
+def open_viewer(path):
+    subprocess.run(
+        [config.config['General']['viewer'], str(path)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 class Shell(Cmd):
 
     def do_docpickup(self, args):
@@ -66,10 +148,10 @@ class Shell(Cmd):
                     _skip += 1
             if _skip > 0:
                 print('Skipped {} duplicates'.format(_skip))
-            print('Added {} entires'.format(_add))
+            print('Added {} entries'.format(_add))
             os.rename(b_path, config.TRASH_FOLDER / b_path.name)
 
-        if len(docs) == 0 and len(bibs) == 0:
+        if len(self.new_links) == 0 and len(bibs) == 0:
             print('Pickup folder empty')
         else:
             self.do_save('')
@@ -80,12 +162,13 @@ class Shell(Cmd):
         bib.save_bibtex(config.BIB_FILE, self.bibtex)
 
 
+    @bib_index_arg_check
     def do_bibrm(self, args):
         '''Remove bibtex entry'''
         del self.bibtex.entries[self.current_bibtex[int(args)]]
         self.do_save('')
 
-
+    @bib_index_arg_check
     def do_bibview(self, args):
         '''View bibtex entry'''
         id_ = self.current_bibtex[int(args)]
@@ -94,6 +177,7 @@ class Shell(Cmd):
         for key in entry:
             print(f'- {config.Terminal.BOLD + key + config.Terminal.END}: {entry[key]}')
 
+    @bib_index_arg_check
     def do_id(self, args):
         '''Copy bibtex entry to clipboard'''
         id_ = self.current_bibtex[int(args)]
@@ -104,9 +188,10 @@ class Shell(Cmd):
         subprocess.run(cmd, universal_newlines=True, input=data)
         print('Copied ID to clipboard')
 
-
+    @bib_index_arg_check
     def do_clip(self, args):
         '''Copy bibtex entry to clipboard'''
+
         id_ = self.current_bibtex[int(args)]
         entry = self.bibtex.entries[id_]
 
@@ -122,7 +207,7 @@ class Shell(Cmd):
     def do_stat(self, args):
         '''Display current statistics'''
         print(f'{len(self.bibtex.entries)} bibtex entries loaded')
-        print(f'{len(self.current_bibtex)} entires in current list')
+        print(f'{len(self.current_bibtex)} entries in current list')
         if self.new_links is not None:
             print(f'{len(self.new_links)} picked up documents to link')
         if self.docs is not None:
@@ -145,7 +230,7 @@ class Shell(Cmd):
         print('DOCS load: {} papers found'.format(len(self.docs)))
 
 
-    def do_list(self, args):
+    def do_doclist(self, args):
         '''Lists all unlinked documents in pickup'''
         if self.new_links is None:
             print('Nothing has been picked up')
@@ -153,8 +238,8 @@ class Shell(Cmd):
         for id_,file in enumerate(self.new_links):
              print(f'{id_:<4}: {file.parts[-1]}')
 
-
-    def do_viewpdf(self, args):
+    @doc_index_arg_check
+    def do_docviewpdf(self, args):
         '''Views an picked up document'''
         if not args.strip().isnumeric():
             print('No valid document index given')
@@ -164,26 +249,15 @@ class Shell(Cmd):
             print('Nothing has been picked up')
             return
 
-        subprocess.run(
-            [config.config['General']['viewer'], str(self.new_links[int(args)])],
-            stdout=subprocess.DEVNULL,
-        )
+        open_viewer(self.new_links[int(args)])
 
-    def do_view(self, args):
+
+    @doc_index_arg_check
+    def do_docview(self, args):
         '''Views an picked up document'''
-        if not args.strip().isnumeric():
-            print('No valid document index given')
-            return
-
-        if self.new_links is None:
-            print('Nothing has been picked up')
-            return
 
         if doc is None:
-            subprocess.run(
-                [config.config['General']['viewer'], str(self.new_links[int(args)])],
-                stdout=subprocess.DEVNULL,
-            )
+            open_viewer(self.new_links[int(args)])
         else:
             lines = doc.parse_pdf(self.new_links[int(args)])
             title = string.capwords(lines[0])
@@ -193,14 +267,15 @@ class Shell(Cmd):
                 print(lines[i])
 
 
-    def do_trash(self, args):
+    @doc_index_arg_check
+    def do_doctrash(self, args):
         '''Moves a document to trash folder in database'''
         os.rename(self.new_links[int(args)], config.TRASH_FOLDER / self.new_links[int(args)].name)
         del self.new_links[int(args)]
 
 
     def do_bib(self, args):
-        '''Lists all loaded bibtex entries in database'''
+        '''Lists selected bibtex entries in database'''
         args = args.strip()
 
         if len(args) > 0:
@@ -262,7 +337,13 @@ class Shell(Cmd):
                 else:
                     self.current_bibtex = list(range(len(self.bibtex.entries)))
 
+        strs_ = self._list_bib()
+        for str_ in strs_:
+            print(str_)
 
+
+    def _list_bib(self):
+        strs_ = [None]*len(self.current_bibtex)
         for id_, cid_ in enumerate(self.current_bibtex):
             entry = self.bibtex.entries[cid_]
             file_ = '   '
@@ -270,26 +351,21 @@ class Shell(Cmd):
                 if f.stem == entry["ID"]:
                     file_ = 'pdf'
 
-            print(f'{id_:<4}[{file_}]: {entry["ID"]}')
+            strs_[id_] = f'{id_:<4}[{file_}]: {entry["ID"]}'
+        return strs_
 
-
+    @bib_index_arg_check
     def do_open(self, args):
         '''Opens paper linked to bibtex entry'''
-        if not args.strip().isnumeric():
-            print('No valid bibtex index given')
-            return
 
         id_ = self.current_bibtex[int(args)]
         fname = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
         if fname.exists():
-            subprocess.run(
-                [config.config['General']['viewer'], fname],
-                stdout=subprocess.DEVNULL,
-            )
+            open_viewer(fname)
         else:
             print('No pdf linked to this entry')
 
-
+    @bib_index_arg_check
     def do_link(self, args):
         '''Link bibtex entry with picked up document'''
         if not args.strip().isnumeric():
@@ -313,7 +389,7 @@ class Shell(Cmd):
         ]
         answers = inquirer.prompt(questions)
         answer = answers['pdf']
-        if answers == 'NONE':
+        if answer == 'NONE':
             print('No PDF linked')
             return
         else:
@@ -386,7 +462,7 @@ class Shell(Cmd):
                 _skip += 1
         if _skip > 0:
             print('Skipped {} duplicates'.format(_skip))
-        print('Added {} entires'.format(_add))
+        print('Added {} entries'.format(_add))
 
         self.do_save('')
 
@@ -400,6 +476,7 @@ class Shell(Cmd):
         self.docs = None
         self.new_links = None
         self.current_bibtex = None
+        self.do_docpickup('')
 
 
     def do_exit(self, args):
