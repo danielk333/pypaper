@@ -87,16 +87,19 @@ def get_PDF_from_ADS(bibcodes, bib_ids):
 
             lines = 0
             keep_ = True
-            try:
-                with open(paper_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if lines == 4:
-                            if line.strip() == '<title>Error</title>':
-                                keep_ = False
-                            break
-                        lines += 1
-            except UnicodeDecodeError:
-                pass
+            if paper_path.exists():
+                try:
+                    with open(paper_path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if lines == 4:
+                                if line.strip() == '<title>Error</title>':
+                                    keep_ = False
+                                break
+                            lines += 1
+                except UnicodeDecodeError:
+                    pass
+            else:
+                continue
 
             if keep_:
                 break
