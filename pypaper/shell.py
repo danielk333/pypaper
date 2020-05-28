@@ -178,13 +178,20 @@ class Shell(Cmd):
     @bib_index_arg_check
     def do_bibrm(self, args):
         '''Remove bibtex entry'''
-        del self.bibtex.entries[self.current_bibtex[int(args)]]
+        id_ = self._get_bibid(args)
+        if id_ is None:
+            print('Index out of range')
+            return
+        del self.bibtex.entries[id_]
         self.do_save('')
 
     @bib_index_arg_check
     def do_bibview(self, args):
         '''View bibtex entry'''
-        id_ = self.current_bibtex[int(args)]
+        id_ = self._get_bibid(args)
+        if id_ is None:
+            print('Index out of range')
+            return
         entry = self.bibtex.entries[id_]
         print(config.Terminal.PURPLE + entry['ID'] +  config.Terminal.END)
         for key in entry:
@@ -193,7 +200,10 @@ class Shell(Cmd):
     @bib_index_arg_check
     def do_id(self, args):
         '''Copy bibtex entry to clipboard'''
-        id_ = self.current_bibtex[int(args)]
+        id_ = self._get_bibid(args)
+        if id_ is None:
+            print('Index out of range')
+            return
         entry = self.bibtex.entries[id_]
 
         data = entry['ID']
@@ -205,7 +215,10 @@ class Shell(Cmd):
     def do_clip(self, args):
         '''Copy bibtex entry to clipboard'''
 
-        id_ = self.current_bibtex[int(args)]
+        id_ = self._get_bibid(args)
+        if id_ is None:
+            print('Index out of range')
+            return
         entry = self.bibtex.entries[id_]
 
         bib_database = bibtexparser.bibdatabase.BibDatabase()
@@ -385,11 +398,27 @@ class Shell(Cmd):
             strs_[id_] = f'{id_:<4}[{file_}]: {entry["ID"]}'
         return strs_
 
+    def _get_bibid(self, args):
+        if len(self.current_bibtex) > 0:
+            if int(args) > len(self.current_bibtex):
+                id_ = None
+            else:
+                id_ = self.current_bibtex[int(args)]
+        else:
+            if int(args) > len(self.bibtex.entries):
+                id_ = None
+            else:
+                id_ = int(args)
+        return id_
+
     @bib_index_arg_check
     def do_open(self, args):
         '''Opens paper linked to bibtex entry'''
+        id_ = self._get_bibid(args)
+        if id_ is None:
+            print('Index out of range')
+            return
 
-        id_ = self.current_bibtex[int(args)]
         fname = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
         if fname.exists():
             open_viewer(fname)
@@ -399,12 +428,12 @@ class Shell(Cmd):
     @bib_index_arg_check
     def do_link(self, args):
         '''Link bibtex entry with picked up document'''
-        if not args.strip().isnumeric():
-            print('No valid bibtex index given')
-            return
 
         self.do_docpickup('')
-        id_ = self.current_bibtex[int(args)]
+        id_ = self._get_bibid(args)
+        if id_ is None:
+            print('Index out of range')
+            return
 
         print(f'Bibtex entry: {config.Terminal.PURPLE + self.bibtex.entries[id_]["ID"] +  config.Terminal.END}')
         for key in ['title','author','year']:
