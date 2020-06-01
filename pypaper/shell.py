@@ -370,6 +370,10 @@ class Shell(Cmd):
                 if add_:
                     self.current_bibtex.append(id_)
 
+            if len(self.current_bibtex) == 0:
+                print('No matches')
+                return
+
         strs_ = self._list_bib()
         for str_ in strs_:
             print(str_)
