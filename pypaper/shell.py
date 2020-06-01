@@ -461,7 +461,9 @@ class Shell(Cmd):
             os.rename(self.new_links[opts_.index(answer)], new_path)
             del self.new_links[opts_.index(answer)]
             print(f'{config.Terminal.GREEN + new_path.name + config.Terminal.END} added to paper database')
-
+            
+            self.docs = glob(str(config.PAPERS_FOLDER / '*.pdf'))
+            self.docs = [pathlib.Path(p) for p in self.docs]
 
     def do_ads(self, args):
         '''Do a search query on the Harvard ADS database and add selected papers to the database. Download PDFs if possible'''
