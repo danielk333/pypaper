@@ -110,6 +110,37 @@ def open_viewer(path):
 
 class Shell(Cmd):
 
+    @bib_index_arg_check
+    def do_tag(self, args):
+        id_ = self._get_bibid(args)
+        if id_ is None:
+            print('Index out of range')
+            return
+
+        questions = [
+            inquirer.Text('tags', message="Enter tags"),
+        ]
+        answers = inquirer.prompt(questions)
+
+        tags = answers['tags'].split(',')
+        tags = [tag.strip() for tag in tags]
+        rem_tags = [tag[1:] for tag in tags if tag[0] == '-']
+        tags = [tag for tag in tags if tag[0] != '-' and len(tag) > 0]
+
+        if 'tags' in self.bibtex.entries[id_]:
+            current_tags = self.bibtex.entries[id_]['tags'].split(',')
+        else:
+            current_tags = []
+
+        current_tags = [tag for tag in current_tags if tag not in rem_tags]
+        current_tags += [tag for tag in tags if tag not in current_tags]
+        current_tags = set(current_tags)
+
+        self.bibtex.entries[id_]['tags'] = ','.join(current_tags)
+
+        self.do_save('')
+
+
     def do_docpickup(self, args):
         '''pdf files to add to database'''
         docs = glob(str(config.PICKUP_FOLDER / '*.pdf'))
@@ -314,6 +345,20 @@ class Shell(Cmd):
                     self.limit = int(args[(find_limit+8):find_space])
 
                 args = args.replace(args[find_limit:find_space], '')
+
+        tags = []
+        if len(args) > 0:
+            find_limit = args.find('--tag', 0)
+            if find_limit != -1:
+                find_space = args.find(' ', find_limit+6)
+                if find_space == -1:
+                    tags = args[(find_limit+6):].split(',')
+                    find_space = len(args)
+                else:
+                    tags = args[(find_limit+6):find_space].split(',')
+
+                args = args.replace(args[find_limit:find_space], '')
+        
         args = args.strip()
 
         if len(args) > 0:
@@ -367,12 +412,38 @@ class Shell(Cmd):
                                 add_ = add_ or resh is not None
                 if add_ is None:
                     add_ = False
+                
+                if len(tags) > 0:
+                    if 'tags' in entry:
+                        tag_ex_ = False
+                        etags = entry['tags'].split(',')
+                        for tag in tags:
+                            if tag in etags:
+                                tag_ex_ = True
+                                break
+                        add_ = add_ and tag_ex_
+                    else:
+                        add_ = False
+
                 if add_:
                     self.current_bibtex.append(id_)
 
             if len(self.current_bibtex) == 0:
                 print('No matches')
                 return
+        else:
+            if len(tags) > 0:
+                self.current_bibtex = []
+                for id_,entry in enumerate(self.bibtex.entries):
+                    tag_ex_ = False
+                    if 'tags' in entry:
+                        etags = entry['tags'].split(',')
+                        for tag in tags:
+                            if tag in etags:
+                                tag_ex_ = True
+                                break
+                    if tag_ex_:
+                        self.current_bibtex.append(id_)
 
         strs_ = self._list_bib()
         for str_ in strs_:
