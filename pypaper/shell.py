@@ -101,7 +101,7 @@ def bib_index_arg_check(func):
 
 
 def open_viewer(path):
-    subprocess.run(
+    subprocess.Popen(
         [config.config['General']['viewer'], str(path)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
