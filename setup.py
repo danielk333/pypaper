@@ -8,9 +8,14 @@ with open('requirements', 'r') as fh:
     pip_req = fh.read().split('\n')
     pip_req = [x.strip() for x in pip_req if len(x.strip()) > 0]
 
+with open('optional_requirements', 'r') as fh:
+    opt_req = fh.read().split('\n')
+    opt_req = [x.strip() for x in opt_req if len(x.strip()) > 0]
+
+
 setuptools.setup(
     name='pypaper',
-    version='0.2.1',
+    version='0.3.0',
     long_description=long_description,
     url='https://github.com/danielk333/pypaper',
     classifiers=[
@@ -20,6 +25,7 @@ setuptools.setup(
     ],
     entry_points={'console_scripts': ['pypaper=pypaper.shell:run']},
     install_requires=pip_req,
+    extras_require={'extras': opt_req},
     packages=setuptools.find_packages(),
     # metadata to display on PyPI
     author='Daniel Kastinen',
