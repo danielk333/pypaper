@@ -17,6 +17,11 @@ from . import config
 from . import bib
 
 try:
+    import readline
+except ImportError:
+    readline = None
+
+try:
     from . import doc
 except ImportError:
     doc = None
