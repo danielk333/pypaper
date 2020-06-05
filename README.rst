@@ -1,8 +1,10 @@
 pypaper
 =========
 
+![Sample usage](https://raw.githubusercontent.com/danielk333/pypaper/tree/master/docs/demo1_2020-06-05_14-35.gif)
+
 Feature list
--------------
+-------------https://github.com/
 
 * Harmonization of bibtex identifiers
 * Searching bibtex database based on logic combinations of regular expression searches of bibtex field values
