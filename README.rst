@@ -4,7 +4,7 @@ pypaper
 .. image:: https://raw.githubusercontent.com/danielk333/pypaper/develop/docs/demo1_2020-06-05_14-35.gif
 
 Feature list
--------------https://github.com/
+-------------
 
 * Harmonization of bibtex identifiers
 * Searching bibtex database based on logic combinations of regular expression searches of bibtex field values
@@ -28,6 +28,7 @@ To install
 -----------------
 
 The barebone version
+
 .. code-block:: bash
 
    pip install git+https://github.com/danielk333/pypaper
@@ -41,6 +42,7 @@ or
    pip install .
 
 To include NASA ADS and PDF parsing support, run
+
 .. code-block:: bash
 
    pip install git+https://github.com/danielk333/pypaper[extras]
