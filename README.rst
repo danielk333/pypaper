@@ -25,6 +25,7 @@ To run
 To install
 -----------------
 
+The barebone version
 .. code-block:: bash
 
    pip install git+https://github.com/danielk333/pypaper
@@ -37,6 +38,18 @@ or
    cd pypaper
    pip install .
 
+To include NASA ADS and PDF parsing support, run
+.. code-block:: bash
+
+   pip install git+https://github.com/danielk333/pypaper[extras]
+
+or 
+
+.. code-block:: bash
+
+   git clone https://github.com/danielk333/pypaper
+   cd pypaper
+   pip install .[extras]
 
 Example
 ---------------
