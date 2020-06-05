@@ -1,7 +1,7 @@
 pypaper
 =========
 
-![Sample usage](https://raw.githubusercontent.com/danielk333/pypaper/tree/master/docs/demo1_2020-06-05_14-35.gif)
+.. image:: https://raw.githubusercontent.com/danielk333/pypaper/tree/develop/docs/demo1_2020-06-05_14-35.gif
 
 Feature list
 -------------https://github.com/
