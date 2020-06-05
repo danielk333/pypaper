@@ -18,7 +18,7 @@ class Terminal:
 
 config = configparser.ConfigParser()
 
-HOME = pathlib.Path(os.path.expanduser("~"))
+HOME = pathlib.Path.home()
 CONF_FOLDER = HOME / '.config'
 CONF_FILE = CONF_FOLDER / 'pypaper.conf'
 
