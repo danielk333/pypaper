@@ -17,6 +17,11 @@ from . import config
 from . import bib
 
 try:
+    import readline
+except ImportError:
+    readline = None
+
+try:
     from . import doc
 except ImportError:
     doc = None
@@ -632,12 +637,12 @@ class Shell(Cmd):
         self.limit = 20
         self.do_docpickup('')
 
-
     def do_exit(self, args):
         '''Quits the program.'''
         print('Quitting and saving')
         self.do_save('')
         raise SystemExit
+
     def do_quit(self, args):
         '''Quits the program.'''
         print('Quitting and saving')
@@ -652,4 +657,10 @@ def run():
     prompt.prompt = '> '
     prompt.setup()
     prompt.do_load('')
-    prompt.cmdloop('Starting prompt...')
+
+    try:
+        prompt.cmdloop('Starting prompt...')
+    except KeyboardInterrupt:
+        print('Exiting and saving')
+        prompt.do_save('')
+

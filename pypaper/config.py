@@ -1,7 +1,14 @@
 import sys
 import pathlib
 import configparser
-import os
+
+try:
+    # PyXDG
+    # https://www.freedesktop.org/wiki/Software/pyxdg/
+    from xdg import BaseDirectory
+except ImportError:
+    BaseDirectory = None
+
 
 class Terminal:
     PURPLE = '\033[95m'
@@ -18,11 +25,19 @@ class Terminal:
 
 config = configparser.ConfigParser()
 
-HOME = pathlib.Path(os.path.expanduser("~"))
+HOME = pathlib.Path.home()
 CONF_FOLDER = HOME / '.config'
-CONF_FILE = CONF_FOLDER / 'pypaper.conf'
+CONF_FILENAME = 'pypaper.conf'
+CONF_FILE = None
 
-CONF_FOLDER.mkdir(parents=True, exist_ok=True)
+if BaseDirectory is not None:
+    CONF_FOLDER = pathlib.Path(BaseDirectory.xdg_config_home)
+    CONF_FILE = BaseDirectory.load_first_config(CONF_FILENAME)
+
+if CONF_FILE is None:
+    CONF_FILE = CONF_FOLDER / CONF_FILENAME
+
+CONF_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
 DEFAULT = {
@@ -51,6 +66,8 @@ PICKUP_FOLDER = DATA_FOLDER / 'PICKUP'
 BIB_FILE = DATA_FOLDER / 'references.bib'
 PAPERS_FOLDER = DATA_FOLDER / 'PAPERS'
 TRASH_FOLDER = DATA_FOLDER / 'TRASH'
+
+DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 
 if not BIB_FILE.exists():
   BIB_FILE.touch()
