@@ -2,6 +2,13 @@ import sys
 import pathlib
 import configparser
 
+try:
+    # PyXDG
+    # https://www.freedesktop.org/wiki/Software/pyxdg/
+    from xdg import BaseDirectory
+except ImportError:
+    BaseDirectory = None
+
 
 class Terminal:
     PURPLE = '\033[95m'
@@ -20,9 +27,17 @@ config = configparser.ConfigParser()
 
 HOME = pathlib.Path.home()
 CONF_FOLDER = HOME / '.config'
-CONF_FILE = CONF_FOLDER / 'pypaper.conf'
+CONF_FILENAME = 'pypaper.conf'
+CONF_FILE = None
 
-CONF_FOLDER.mkdir(parents=True, exist_ok=True)
+if BaseDirectory is not None:
+    CONF_FOLDER = pathlib.Path(BaseDirectory.xdg_config_home)
+    CONF_FILE = BaseDirectory.load_first_config(CONF_FILENAME)
+
+if CONF_FILE is None:
+    CONF_FILE = CONF_FOLDER / CONF_FILENAME
+
+CONF_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
 DEFAULT = {
