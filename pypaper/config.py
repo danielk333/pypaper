@@ -67,6 +67,8 @@ BIB_FILE = DATA_FOLDER / 'references.bib'
 PAPERS_FOLDER = DATA_FOLDER / 'PAPERS'
 TRASH_FOLDER = DATA_FOLDER / 'TRASH'
 
+DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+
 if not BIB_FILE.exists():
   BIB_FILE.touch()
 
