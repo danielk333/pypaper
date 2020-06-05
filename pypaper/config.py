@@ -1,7 +1,7 @@
 import sys
 import pathlib
 import configparser
-import os
+
 
 class Terminal:
     PURPLE = '\033[95m'
