@@ -32,7 +32,7 @@ CONF_FILE = None
 
 if BaseDirectory is not None:
     CONF_FOLDER = pathlib.Path(BaseDirectory.xdg_config_home)
-    CONF_FILE = BaseDirectory.load_first_config(CONF_FILENAME)
+    CONF_FILE = pathlib.Path(BaseDirectory.load_first_config(CONF_FILENAME))
 
 if CONF_FILE is None:
     CONF_FILE = CONF_FOLDER / CONF_FILENAME
