@@ -10,19 +10,6 @@ except ImportError:
     BaseDirectory = None
 
 
-class Terminal:
-    PURPLE = '\033[95m'
-    CYAN = '\033[96m'
-    DARKCYAN = '\033[36m'
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
-    BULLET = '\u2022'
-
 config = configparser.ConfigParser()
 
 HOME = pathlib.Path.home()
@@ -57,8 +44,7 @@ config.read_dict(DEFAULT)
 if CONF_FILE.exists():
     config.read([CONF_FILE])
 else:
-    with open(CONF_FILE, 'w') as configfile:
-        config.write(configfile)
+    configfile.touch()
 
 DATA_FOLDER = pathlib.Path(config['General']['path'])
 
@@ -70,7 +56,7 @@ TRASH_FOLDER = DATA_FOLDER / 'TRASH'
 DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 
 if not BIB_FILE.exists():
-  BIB_FILE.touch()
+    BIB_FILE.touch()
 
 DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 PICKUP_FOLDER.mkdir(exist_ok=True)

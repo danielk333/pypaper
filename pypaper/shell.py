@@ -7,19 +7,15 @@ import pathlib
 import subprocess
 import re
 import string
+import curses
+import curses.textpad
 
 #Third party
 import bibtexparser
-import inquirer
 
 #Local
 from . import config
 from . import bib
-
-try:
-    import readline
-except ImportError:
-    readline = None
 
 try:
     from . import doc
@@ -32,79 +28,6 @@ except Exception:
     ads = None
 
 
-def doc_index_arg_check(func):
-    def checked_func(self, args):
-        if self.new_links is None:
-            print('Nothing has been picked up')
-            return
-        if len(self.new_links) == 0:
-            print('Nothing has been picked up')
-            return
-
-        if len(args) == 0:
-            opts_ = [file.name for file in self.new_links]
-
-            questions = [
-                inquirer.List('doc',
-                    message='Which picked up document?',
-                    choices=opts_ + ['NONE'],
-                    carousel=True,
-                ),
-            ]
-            answers = inquirer.prompt(questions)
-            answer = answers['doc']
-            if answer == 'NONE':
-                print('No document chosen')
-                return
-            else:
-                args = str(opts_.index(answer))
-
-        elif not args.strip().isnumeric():
-            print('No valid document index given')
-            return
-
-        return func(self, args)
-    checked_func.__doc__ = func.__doc__
-    return checked_func
-
-
-
-def bib_index_arg_check(func):
-    def checked_func(self, args):
-        if self.bibtex is None:
-            print('No bibtex loaded')
-            return
-        if len(self.bibtex.entries) == 0:
-            print('No bibtex entries loaded')
-            return
-
-        if len(args) == 0:
-            opts_ = self._list_bib()
-
-            questions = [
-                inquirer.List('bib',
-                    message='Which bibtex entry?',
-                    choices=opts_ + ['NONE'],
-                    carousel=True,
-                ),
-            ]
-            answers = inquirer.prompt(questions)
-            answer = answers['bib']
-            if answer == 'NONE':
-                print('No bibtex entry chosen')
-                return
-            else:
-                args = str(opts_.index(answer))
-
-        elif not args.strip().isnumeric():
-            print('No valid document index given')
-            return
-
-        return func(self, args)
-    checked_func.__doc__ = func.__doc__
-    return checked_func
-
-
 def open_viewer(path):
     subprocess.Popen(
         [config.config['General']['viewer'], str(path)],
@@ -113,554 +36,419 @@ def open_viewer(path):
     )
 
 
+class Color:
+
+    def __init__(self, fg, bg=None):
+        self.fg = fg
+        self.bg = bg
+
+    def pair(self):
+        return [self.fg, self.bg]
+
+    def __eq__(self, other):
+        return self.fg == other.fg and self.bg == other.bg
+
+
+
+
+class Key:
+    SPECIAL = {'<backspace>': '⌫',  # ⌫
+               '<del>': '⌦',
+               '<ins>': '⎀',
+               '<left>': '→',
+               '<right>': '←',
+               '<up>': '↑',
+               '<down>': '↓',
+               '<home>': 'Home',
+               '<end>': 'End',
+               '<escape>': '⎋',
+               '<return>': '⏎',  # ↵ ↲
+               '<pgup>': 'PgUp',  # ⇞
+               '<pgdn>': 'PgDn',  # ⇟
+               '<space>': '␣',
+               '<tab>': '⇥',
+               '<f1>': 'F1',
+               '<f2>': 'F2',
+               '<f3>': 'F3',
+               '<f4>': 'F4',
+               '<f5>': 'F5',
+               '<f6>': 'F6',
+               '<f7>': 'F7',
+               '<f8>': 'F8',
+               '<f9>': 'F9',
+               '<f10>': 'F10',
+               '<f11>': 'F11',
+               '<f12>': 'F12',
+               }
+    BACKSPACE = '<backspace>'
+    DELETE = '<del>'
+    LEFT = '<left>'
+    RIGHT = '<right>'
+    UP = '<up>'
+    DOWN = '<down>'
+    PGUP = '<pgup>'
+    PGDN = '<pgdn>'
+    HOME = '<home>'
+    END = '<end>'
+    RETURN = '<return>'
+    ESCAPE = '<escape>'
+    SPACE = '<space>'
+    TAB = '<tab>'
+    F1 = '<f1>'
+    F2 = '<f2>'
+    F3 = '<f3>'
+    F4 = '<f4>'
+    F5 = '<f5>'
+    F6 = '<f6>'
+    F7 = '<f7>'
+    F8 = '<f8>'
+    F9 = '<f9>'
+    F10 = '<f10>'
+    F11 = '<f11>'
+    F12 = '<f12>'
+
+    def __init__(self, value, special=False):
+        self.value = value
+        self.special = special
+
+    @classmethod
+    def read(cls, stdscr):
+        try:
+            value = stdscr.get_wch()
+            return Key.parse(value)
+        except (KeyboardInterrupt, curses.error):
+            return Key('C', special=True)
+        except EOFError:
+            return Key('D', special=True)
+
+    @classmethod
+    def parse(cls, value):
+        if value == curses.KEY_BACKSPACE:
+            return Key(Key.BACKSPACE, True)
+        elif value == curses.KEY_DC:
+            return Key(Key.DELETE, True)
+        elif value == curses.KEY_LEFT:
+            return Key(Key.LEFT, True)
+        elif value == curses.KEY_RIGHT:
+            return Key(Key.RIGHT, True)
+        elif value == curses.KEY_UP:
+            return Key(Key.UP, True)
+        elif value == curses.KEY_DOWN:
+            return Key(Key.DOWN, True)
+        elif value == curses.KEY_END:
+            return Key(Key.END, True)
+        elif value == curses.KEY_HOME:
+            return Key(Key.HOME, True)
+        elif value == curses.KEY_NPAGE:
+            return Key(Key.PGDN, True)
+        elif value == curses.KEY_PPAGE:
+            return Key(Key.PGUP, True)
+        elif value == curses.KEY_F1:
+            return Key(Key.F1, True)
+        elif value == curses.KEY_F2:
+            return Key(Key.F2, True)
+        elif value == curses.KEY_F3:
+            return Key(Key.F3, True)
+        elif value == curses.KEY_F4:
+            return Key(Key.F4, True)
+        elif value == curses.KEY_F5:
+            return Key(Key.F5, True)
+        elif value == curses.KEY_F6:
+            return Key(Key.F6, True)
+        elif value == curses.KEY_F7:
+            return Key(Key.F7, True)
+        elif value == curses.KEY_F8:
+            return Key(Key.F8, True)
+        elif value == curses.KEY_F9:
+            return Key(Key.F9, True)
+        elif value == curses.KEY_F10:
+            return Key(Key.F10, True)
+        elif value == curses.KEY_F11:
+            return Key(Key.F11, True)
+        elif value == curses.KEY_F12:
+            return Key(Key.F12, True)
+        elif isinstance(value, int):
+            # no idea what key that is
+            return Key('', True)
+        elif isinstance(value, str):
+            try:
+                ctrlkey = str(curses.unctrl(value), 'ascii')
+            except OverflowError:
+                # no idea what key that is
+                return Key('', True)
+
+            if value in "\n\r":
+                return Key(Key.RETURN, special=True)
+
+            if ctrlkey in ['^H', '^?']:
+                return Key(Key.BACKSPACE, special=True)
+
+            if ctrlkey == '^[':
+                return Key(Key.ESCAPE, True)
+
+            if ctrlkey != value:
+                return Key(ctrlkey[1:], True)
+            else:
+                return Key(value)
+
+    def __len__(self):
+        return len(str(self))
+
+    def __eq__(self, other):
+        if isinstance(other, Key):
+            return self.value == other.value and self.special == other.special
+        elif isinstance(other, str):
+            return str(self) == other
+        elif isinstance(other, bytes):
+            return str(self) == str(other, 'ascii')
+        raise ValueError("'other' has unexpected type {type(other)}")
+
+    def __str__(self):
+        if self.special:
+            if self.value.startswith('<'):
+                return self.value
+            return  '^' + self.value
+        return self.value
+
+
+class Edit:
+
+    def __init__(self, win, history):
+        self.history = history
+        self.win = win
+        self.history_id = 0
+
+        self.ACTIONS = {
+            Key.UP: self.load_hist_prev,
+            Key.DOWN: self.load_hist_next,
+            Key.LEFT: self.prev,
+            Key.RIGHT: self.next,
+            Key.DELETE: self.delete,
+            Key.BACKSPACE: self.back,
+            Key.RETURN: self.exit,
+            Key.HOME: self.home,
+            Key.END: self.end,
+        }
+
+    def load_history(self):
+        hist_len = len(self.history) + 1
+        self.history_id = (self.history_id + hist_len) % hist_len
+        self.win.clear()
+        if self.history_id > 0:
+            self.win.addstr(0,0,self.history[self.history_id])
+        self.win.noutrefresh()
+
+    def load_hist_prev(self):
+        self.history_id += 1
+        self.load_history()
+
+    def load_hist_next(self):
+        self.history_id -= 1
+        self.load_history()
+
+    def delete(self):
+        self.win.delch()
+
+    def prev(self):
+        if self.x > 0:
+            self.win.move(self.y, self.x-1)
+
+    def next(self):
+        if self.x < self.cols:
+            self.win.move(self.y, self.x+1)
+
+    def home(self):
+        self.win.move(self.y, 0)
+
+    def end(self):
+        self.win.move(self.y, self.cols)
+
+    def back(self):
+        if self.x > 0:
+            self.win.move(self.y, self.x-1)
+            self.win.delch()
+
+    def exit(self):
+        self.edit = False
+
+    def content(self):
+        line = self.win.instr(0,0).decode(encoding="utf-8")
+        return line.strip()
+
+    def key_handler(self, key):
+        max_y, max_x = self.win.getmaxyx()
+        self.lines = max_y
+        self.cols = max_x
+        y, x = self.win.getyx()
+        self.y = y
+        self.x = x
+
+        strkey = str(key)
+        self.edit = True
+
+        ret = None
+
+        if strkey in self.ACTIONS:
+            action = self.ACTIONS[strkey]
+            action()
+        elif not key.special:
+            self.win.addstr(y,x,strkey)
+            self.win.move(y, x+1)
+
+
+    def run(self):
+        self.edit = True
+        while self.edit:
+            self.key_handler(Key.read(self.win))
+
+
+
 class Shell(Cmd):
 
-    @bib_index_arg_check
-    def do_tag(self, args):
-        id_ = self._get_bibid(args)
-        if id_ is None:
-            print('Index out of range')
-            return
-
-        questions = [
-            inquirer.Text('tags', message="Enter tags"),
-        ]
-        answers = inquirer.prompt(questions)
-
-        tags = answers['tags'].split(',')
-        tags = [tag.strip() for tag in tags]
-        rem_tags = [tag[1:] for tag in tags if tag[0] == '-']
-        tags = [tag for tag in tags if tag[0] != '-' and len(tag) > 0]
-
-        if 'tags' in self.bibtex.entries[id_]:
-            current_tags = self.bibtex.entries[id_]['tags'].split(',')
-        else:
-            current_tags = []
-
-        current_tags = [tag for tag in current_tags if tag not in rem_tags]
-        current_tags += [tag for tag in tags if tag not in current_tags]
-        current_tags = set(current_tags)
-
-        self.bibtex.entries[id_]['tags'] = ','.join(current_tags)
-
-        self.do_save('')
+    def color(self, ind=1):
+        return curses.color_pair(ind)
 
 
-    def do_docpickup(self, args):
-        '''pdf files to add to database'''
-        docs = glob(str(config.PICKUP_FOLDER / '*.pdf'))
-        docs = [pathlib.Path(p) for p in docs]
+    def draw_terminal(self):
+        self.terminal_window.clear()
 
-        self.new_links = docs
+        if len(self.terminal_lines) >= self.terminal_h:
+            self.terminal_lines = self.terminal_lines[-self.terminal_h:]
 
-
-    def do_pickup(self, args):
-        '''Pickup bibtex files and pdf files to add to database'''
-
-        self.do_docpickup('')
-
-        bibs = glob(str(config.PICKUP_FOLDER / '*.bib'))
-        bibs = [pathlib.Path(p) for p in bibs]
-
-        for b_path in bibs:
-            print('Picking up from "{}"'.format(b_path))
-        if len(bibs) > 0:
-            b = bib.load_bibtex(bibs)
-            _skip = 0
-            _add = 0        
-            bib.rename_bibtex(b)
-            #add non-duplicates
-            for in_entry in b.entries:
-                _exists = False
-                if 'title' not in in_entry:
-                    continue
-
-                for entry in self.bibtex.entries:
-                    if in_entry['ID'] == entry['ID']:
-                        _exists = True
-                    if str(in_entry['title']) == str(entry['title']):
-                        _exists = True
-
-                if not _exists:
-                    self.bibtex.entries.append(in_entry)
-                    _add += 1
-                else:
-                    _skip += 1
-            if _skip > 0:
-                print('Skipped {} duplicates'.format(_skip))
-
-            _add_str = 0
-            for key in b.strings:
-                if key not in self.bibtex.strings:
-                    self.bibtex.strings[key] = b.strings[key]
-                    _add_str += 1
-
-            print('Added {} entries'.format(_add))
-            print('Added {}/{} strings'.format(_add_str, len(b.strings) - len(bibtexparser.bibdatabase.COMMON_STRINGS)))
-            for b_path in bibs:
-                os.rename(b_path, config.TRASH_FOLDER / b_path.name)
-
-        if len(self.new_links) == 0 and len(bibs) == 0:
-            print('Pickup folder empty')
-        else:
-            self.do_save('')
+        self.terminal_window.hline(self.terminal_h-1,0,curses.ACS_HLINE,self.terminal_w,0)
+        j = 1
+        for i in range(len(self.terminal_lines)-1,-1,-1):
+            self.screen.addstr(self.terminal_h - j, 0, self.terminal_lines[i])
+            j += 1
+        self.screen.noutrefresh()
 
 
-    def do_save(self, args):
-        '''Save bibtex file'''
-        bib.save_bibtex(config.BIB_FILE, self.bibtex)
+    def draw_display(self):
+        pass
 
 
-    @bib_index_arg_check
-    def do_bibrm(self, args):
-        '''Remove bibtex entry'''
-        id_ = self._get_bibid(args)
-        if id_ is None:
-            print('Index out of range')
-            return
-        del self.bibtex.entries[id_]
-        self.do_save('')
-
-    @bib_index_arg_check
-    def do_bibview(self, args):
-        '''View bibtex entry'''
-        id_ = self._get_bibid(args)
-        if id_ is None:
-            print('Index out of range')
-            return
-        entry = self.bibtex.entries[id_]
-        print(config.Terminal.PURPLE + entry['ID'] +  config.Terminal.END)
-        for key in entry:
-            print(f'- {config.Terminal.BOLD + key + config.Terminal.END}: {entry[key]}')
-
-    @bib_index_arg_check
-    def do_id(self, args):
-        '''Copy bibtex entry to clipboard'''
-        id_ = self._get_bibid(args)
-        if id_ is None:
-            print('Index out of range')
-            return
-        entry = self.bibtex.entries[id_]
-
-        data = entry['ID']
-        cmd = ['xsel','-b','-i']
-        subprocess.run(cmd, universal_newlines=True, input=data)
-        print('Copied ID to clipboard')
-
-    @bib_index_arg_check
-    def do_clip(self, args):
-        '''Copy bibtex entry to clipboard'''
-
-        id_ = self._get_bibid(args)
-        if id_ is None:
-            print('Index out of range')
-            return
-        entry = self.bibtex.entries[id_]
-
-        bib_database = bibtexparser.bibdatabase.BibDatabase()
-        bib_database.entries = [entry]
-
-        data = bibtexparser.dumps(bib_database)
-        cmd = ['xsel','-b','-i']
-        subprocess.run(cmd, universal_newlines=True, input=data)
-        print('Copied bibtex entry to clipboard')
+    def do_quit(self, line):
+        #self.do_save('')
+        return True
 
 
-    def do_stat(self, args):
-        '''Display current statistics'''
-        print(f'{len(self.bibtex.entries)} bibtex entries loaded')
-        print(f'{len(self.current_bibtex)} entries in current list')
-        if self.new_links is not None:
-            print(f'{len(self.new_links)} picked up documents to link')
-        if self.docs is not None:
-            print(f'{len(self.docs)} documents in database')
+    def restore_curses(self):
+        curses.nocbreak()
+        self.screen.keypad(False)
+        curses.endwin()
 
 
-    def do_load(self, args):
-        '''Load bibtex file and list of papers'''
-        self.bibtex = bib.load_bibtex(config.BIB_FILE)
-
-        self.bibtex.comments = []
-
-        bib.rename_bibtex(self.bibtex)
-        self.current_bibtex = []
-
-        print('Bib load: {} entries loaded'.format(len(self.bibtex.entries)))
-        self.docs = glob(str(config.PAPERS_FOLDER / '*.pdf'))
-        self.docs = [pathlib.Path(p) for p in self.docs]
-
-        print('DOCS load: {} papers found'.format(len(self.docs)))
+    def precmd(self, line):
+        self.terminal_lines += [self.prompt + line]
 
 
-    def do_doclist(self, args):
-        '''Lists all unlinked documents in pickup'''
-        if self.new_links is None:
-            print('Nothing has been picked up')
-            return
-        for id_,file in enumerate(self.new_links):
-             print(f'{id_:<4}: {file.parts[-1]}')
-
-    @doc_index_arg_check
-    def do_docviewpdf(self, args):
-        '''Views an picked up document'''
-        if not args.strip().isnumeric():
-            print('No valid document index given')
-            return
-
-        if self.new_links is None:
-            print('Nothing has been picked up')
-            return
-
-        open_viewer(self.new_links[int(args)])
+    def postcmd(self, stop, line):
+        self.cmd_history += [line]
+        self.cmdwin.clear()
+        self.cmdwin.noutrefresh()
+        self.screen.noutrefresh()
+        self.draw_terminal()
+        self.draw_display()
+        curses.doupdate()
 
 
-    @doc_index_arg_check
-    def do_docview(self, args):
-        '''Views an picked up document'''
-
-        if doc is None:
-            open_viewer(self.new_links[int(args)])
-        else:
-            lines = doc.parse_pdf(self.new_links[int(args)])
-            title = string.capwords(lines[0])
-            print(title)
-            print('='*len(title))
-            for i in range(10):
-                print(lines[i])
-
-
-    @doc_index_arg_check
-    def do_doctrash(self, args):
-        '''Moves a document to trash folder in database'''
-        os.rename(self.new_links[int(args)], config.TRASH_FOLDER / self.new_links[int(args)].name)
-        del self.new_links[int(args)]
-
-
-    def do_bib(self, args):
-        '''Lists selected bibtex entries in database, syntax: --limit [int] [field]=[regex] &/| [field]=[regex]...'''
-
-        if len(args) > 0:
-            find_limit = args.find('--limit', 0)
-            if find_limit != -1:
-                find_space = args.find(' ', find_limit+8)
-                if find_space == -1:
-                    self.limit = int(args[(find_limit+8):])
-                    find_space = len(args)
-                else:
-                    self.limit = int(args[(find_limit+8):find_space])
-
-                args = args.replace(args[find_limit:find_space], '')
-
-        tags = []
-        if len(args) > 0:
-            find_limit = args.find('--tag', 0)
-            if find_limit != -1:
-                find_space = args.find(' ', find_limit+6)
-                if find_space == -1:
-                    tags = args[(find_limit+6):].split(',')
-                    find_space = len(args)
-                else:
-                    tags = args[(find_limit+6):find_space].split(',')
-
-                args = args.replace(args[find_limit:find_space], '')
+    def setup_colors(self):
+        curses.init_pair(1, *(7, 0))
+        curses.init_pair(2, *(8, 0))
         
-        args = args.strip()
-
-        if len(args) > 0:
-            arg_list = []
-            operators = []
-            find_ret = 0
-            find_pos = 0
-
-            while True:
-                eq_pos = args.find('=', find_pos)
-                if eq_pos == -1:
-                    break
-                key = args[find_pos:eq_pos].strip()
-                if eq_pos+1 >= len(args):
-                    arg_list.append([len(arg_list), key, ''])
-                    break
-
-                if args[eq_pos+1] in ['"', "'"]:
-                    find_pos = args.find(args[eq_pos+1], eq_pos+2)
-                    if find_pos == -1:
-                        raise Exception('No closing quotation mark on pattern')
-                    pattern = args[(eq_pos+2):find_pos]
-                    find_pos += 1
-                else:
-                    find_pos = args.find(' ', eq_pos)
-                    if find_pos == -1:
-                        find_pos = len(args)
-                    pattern = args[(eq_pos+1):find_pos]
-
-                arg_list.append([len(arg_list), key, pattern])
-
-                if find_pos+1 >= len(args):
-                    break
-                else:
-                    operators.append(args[find_pos+1])
-                    find_pos += 3
-
-            self.current_bibtex = []
-            for id_,entry in enumerate(self.bibtex.entries):
-                add_ = None
-                for arg_id, key, pattern in arg_list:
-                    if key in entry:
-                        resh = re.search(pattern, str(entry[key]))
-                        if add_ is None:
-                            add_ = resh is not None
-                        else:
-                            operator = operators[arg_id-1]
-                            if operator == '&':
-                                add_ = add_ and resh is not None
-                            elif operator == '|':
-                                add_ = add_ or resh is not None
-                if add_ is None:
-                    add_ = False
-                
-                if len(tags) > 0:
-                    if 'tags' in entry:
-                        tag_ex_ = False
-                        etags = entry['tags'].split(',')
-                        for tag in tags:
-                            if tag in etags:
-                                tag_ex_ = True
-                                break
-                        add_ = add_ and tag_ex_
-                    else:
-                        add_ = False
-
-                if add_:
-                    self.current_bibtex.append(id_)
-
-            if len(self.current_bibtex) == 0:
-                print('No matches')
-                return
-        else:
-            if len(tags) > 0:
-                self.current_bibtex = []
-                for id_,entry in enumerate(self.bibtex.entries):
-                    tag_ex_ = False
-                    if 'tags' in entry:
-                        etags = entry['tags'].split(',')
-                        for tag in tags:
-                            if tag in etags:
-                                tag_ex_ = True
-                                break
-                    if tag_ex_:
-                        self.current_bibtex.append(id_)
-
-        strs_ = self._list_bib()
-        for str_ in strs_:
-            print(str_)
-
-
-    def _list_bib(self):
-        if len(self.current_bibtex) == 0:
-            if len(self.bibtex.entries) > self.limit:
-                display_bibtex = list(range(self.limit))
-            else:
-                display_bibtex = list(range(len(self.bibtex.entries)))
-        else:
-            if len(self.current_bibtex) > self.limit:
-                display_bibtex = self.current_bibtex[:self.limit]
-            else:
-                display_bibtex = self.current_bibtex
-
-        strs_ = [None]*len(display_bibtex)
-        for id_, cid_ in enumerate(display_bibtex):
-            entry = self.bibtex.entries[cid_]
-            file_ = '   '
-            for f in self.docs:
-                if f.stem == entry["ID"]:
-                    file_ = 'pdf'
-
-            strs_[id_] = f'{id_:<4}[{file_}]: {entry["ID"]}'
-        return strs_
-
-    def _get_bibid(self, args):
-        if len(self.current_bibtex) > 0:
-            if int(args) > len(self.current_bibtex):
-                id_ = None
-            else:
-                id_ = self.current_bibtex[int(args)]
-        else:
-            if int(args) > len(self.bibtex.entries):
-                id_ = None
-            else:
-                id_ = int(args)
-        return id_
-
-    @bib_index_arg_check
-    def do_open(self, args):
-        '''Opens paper linked to bibtex entry'''
-        id_ = self._get_bibid(args)
-        if id_ is None:
-            print('Index out of range')
-            return
-
-        fname = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
-        if fname.exists():
-            open_viewer(fname)
-        else:
-            print('No pdf linked to this entry')
-
-    @bib_index_arg_check
-    def do_link(self, args):
-        '''Link bibtex entry with picked up document'''
-
-        self.do_docpickup('')
-        id_ = self._get_bibid(args)
-        if id_ is None:
-            print('Index out of range')
-            return
-
-        print(f'Bibtex entry: {config.Terminal.PURPLE + self.bibtex.entries[id_]["ID"] +  config.Terminal.END}')
-        for key in ['title','author','year']:
-            if key in self.bibtex.entries[id_]:
-                print(f'{key}: {self.bibtex.entries[id_][key]}')
-        opts_ = [file.name for file in self.new_links]
-        questions = [
-            inquirer.List('pdf',
-                message='Shall be linked with which PDF?',
-                choices=opts_ + ['NONE'],
-                carousel=True,
-            ),
-        ]
-        answers = inquirer.prompt(questions)
-        answer = answers['pdf']
-        if answer == 'NONE':
-            print('No PDF linked')
-            return
-        else:
-            new_path = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
-            os.rename(self.new_links[opts_.index(answer)], new_path)
-            del self.new_links[opts_.index(answer)]
-            print(f'{config.Terminal.GREEN + new_path.name + config.Terminal.END} added to paper database')
-            
-            self.docs = glob(str(config.PAPERS_FOLDER / '*.pdf'))
-            self.docs = [pathlib.Path(p) for p in self.docs]
-
-    def do_ads(self, args):
-        '''Do a search query on the Harvard ADS database and add selected papers to the database. Download PDFs if possible'''
-
-        if ads is None:
-            print('ADS interface import failed')
-            return 
-
-        if len(args) == 0:
-            print('No search query given')
-            return 
-
-        arg_dict = {}
-        find_ret = 0
-        find_pos = 0
-        while True:
-            eq_pos = args.find('=', find_pos)
-            if eq_pos == -1:
-                break
-            key = args[find_pos:eq_pos].strip()
-            if eq_pos+1 >= len(args):
-                break
-
-            if args[eq_pos+1] in ['"', "'"]:
-                find_pos = args.find(args[eq_pos+1], eq_pos+2)
-                if find_pos == -1:
-                    raise Exception('No closing quotation mark on pattern')
-                pattern = args[(eq_pos+2):find_pos]
-            else:
-                find_pos = args.find(' ', eq_pos)
-                if find_pos == -1:
-                    find_pos = len(args)
-                pattern = args[(eq_pos+1):find_pos]
-
-            arg_dict[key] = pattern
-
-            if find_pos+1 >= len(args):
-                break
-
-        res_ = ads.get_bibtex_from_ADS(arg_dict)
-        if res_ is None:
-            return
-        else:
-            bib_database, bibcodes = res_
-
-        bib.rename_bibtex(bib_database)
-        #add non-duplicates
-        _add = 0
-        _skip = 0
-        for in_entry in bib_database.entries:
-            _exists = False
-            for entry in self.bibtex.entries:
-                if in_entry['ID'] == entry['ID']:
-                    _exists = True
-                if str(in_entry['title']) == str(entry['title']):
-                    _exists = True
-
-            if not _exists:
-                self.bibtex.entries.append(in_entry)
-                _add += 1
-            else:
-                _skip += 1
-        if _skip > 0:
-            print('Skipped {} duplicates'.format(_skip))
-        print('Added {} entries'.format(_add))
-
-        self.do_save('')
-
-        ads.get_PDF_from_ADS(bibcodes, [entry['ID'] for entry in bib_database.entries])
-
-        self.do_load('')
-
-
-    def do_adsfill(self, args):
-        '''Attempt to get pdfs for all bibtex entries generated by ads'''
-        bibcodes = []
-        bib_ids = []
-
-        for entry in self.bibtex.entries:
-            if 'adsurl' in entry:
-                bibcode = entry['adsurl'].split('/')[-1]
-                bibcode = bibcode.replace('}','')
-
-                bibcodes.append(bibcode)
-                bib_ids.append(entry['ID'])
-
-        ads.get_PDF_from_ADS(bibcodes, bib_ids)
-        self.do_load('')
 
     def setup(self):
         self.bibtex = None
         self.docs = None
-        self.new_links = None
+        self.current_docs = None
         self.current_bibtex = None
         self.limit = 20
-        self.do_docpickup('')
 
-    def do_exit(self, args):
-        '''Quits the program.'''
-        print('Quitting and saving')
-        self.do_save('')
-        raise SystemExit
+        self.terminal_lines = []
+        self.cmd_history = []
 
-    def do_quit(self, args):
-        '''Quits the program.'''
-        print('Quitting and saving')
-        self.do_save('')
-        raise SystemExit
+        self.use_colors = True
+
+        self.screen = curses.initscr()
+        curses.noecho()
+        self.screen.keypad(True)
+
+        self.cmdbox_h = 1
+
+        if curses.has_colors() and self.use_colors:
+            curses.start_color()
+            curses.use_default_colors()
+            self.setup_colors()
+
+        try:
+            curses.curs_set(1)
+        except:
+            pass
+
+        self.screen.attrset(self.color())
+        self.screen.noutrefresh()
+
+        self.terminal_h = curses.LINES - self.cmdbox_h - 1
+        self.terminal_w = curses.COLS//2
+        self.terminal_window = curses.newwin(self.terminal_h, self.terminal_w, 0, 0)
+        self.terminal_window.bkgd(' ', self.color())
+        self.terminal_window.noutrefresh()
+        
+        self.display_h = curses.LINES
+        self.display_w = curses.COLS//2
+        self.display_window = curses.newwin(self.display_h, self.display_w, 0, self.terminal_w)
+        self.display_window.border()
+        self.display_window.bkgd(' ', self.color())
+        self.display_window.noutrefresh()
+
+        self.cmdwin = curses.newwin(self.cmdbox_h, self.terminal_w, self.terminal_h, 0)
+        self.display_window.bkgd(' ', self.color(2))
+        self.display_window.noutrefresh()
+
+        self.draw_terminal()
+        self.draw_display()
+
+        curses.doupdate()
 
 
-Shell.do_bw = Shell.do_bibview
+    def get_command(self):
+        self.cmdwin.clear()
+        self.cmdwin.refresh()
+        
+        cmd_enter = Edit(self.cmdwin, self.cmd_history)
+        cmd_enter.run()
+        return cmd_enter.content()
+        
+
+
+    def default(self,line):
+        self.write("Don't understand '" + line + "'")
+
+
+    def write(self, line):
+        self.terminal_lines += [line]
+
+
 
 def run():
     prompt = Shell()
-    prompt.prompt = '> '
-    prompt.setup()
-    prompt.do_load('')
+    flag = False
 
     try:
-        prompt.cmdloop('Starting prompt...')
-    except KeyboardInterrupt:
-        print('Exiting and saving')
-        prompt.do_save('')
+        prompt.prompt = '> '
+        prompt.setup()
+        while not flag:
+            text = prompt.get_command()
+
+            prompt.precmd(text)
+            flag = prompt.onecmd(text)
+            prompt.postcmd(flag, text)
+
+    except (Exception, KeyboardInterrupt) as excep:
+        prompt.restore_curses()
+        raise excep
+    prompt.restore_curses()
+
+
+
 
