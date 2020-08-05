@@ -62,3 +62,31 @@ DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 PICKUP_FOLDER.mkdir(exist_ok=True)
 PAPERS_FOLDER.mkdir(exist_ok=True)
 TRASH_FOLDER.mkdir(exist_ok=True)
+
+
+class Color:
+
+    def __init__(self, fg, bg=None):
+        self.fg = fg
+        self.bg = bg
+
+    def pair(self):
+        return [self.fg, self.bg]
+
+    def __eq__(self, other):
+        return self.fg == other.fg and self.bg == other.bg
+
+bg_color = 7
+text_color = 0
+
+#todo, custom colors
+colors = {
+    'background': Color(text_color, bg_color),
+    'borders': Color(7, bg_color),
+    'text': Color(text_color, bg_color),
+    'command': Color(text_color, bg_color),
+    'prompt': Color(1, bg_color),
+    'bib-line': Color(text_color, bg_color),
+    'bib-key': Color(1, bg_color),
+    'bib-item': Color(text_color, bg_color),
+}
