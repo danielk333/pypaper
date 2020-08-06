@@ -211,6 +211,7 @@ class Browse:
     def __init__(self, shell, index=None):
         self.shell = shell
         self.browse = True
+        self.short_command = ''
         if index is None:
             self.index = 0
         else:
@@ -222,6 +223,7 @@ class Browse:
             Key.RETURN: self.command,
             Key.PGUP: lambda: self.up(step=config.config['General'].getint('page-key-step')),
             Key.PGDN: lambda: self.down(step=config.config['General'].getint('page-key-step')),
+            '/': self.search,
             ':': self.command,
         }
 
@@ -250,6 +252,10 @@ class Browse:
     def command(self):
         self.browse = False
 
+    def search(self):
+        self.short_command = 'search '
+        self.browse = False
+
     def key_handler(self, key):
         strkey = str(key)
         self.browse = True
@@ -260,23 +266,25 @@ class Browse:
 
     def run(self):
         self.browse = True
+        self.short_command = ''
         while self.browse:
             key = Key.read(self.shell.bib_window)
             self.key_handler(key)
             self.shell.draw_bib(self.index)
             self.shell.draw_display(self.index)
-        # assert 0, key
+        return self.short_command
 
 
 class Edit:
 
-    def __init__(self, win, history, start_ch, color):
+    def __init__(self, win, history, start_ch, color, start_offset = 0):
         self.history = history
         self.win = win
         self.history_id = 0
         self.color = color
         self.start_ch = start_ch
         self.execute = False
+        self.start_offset = start_offset
 
         self.ACTIONS = {
             Key.UP: self.load_hist_prev,
@@ -322,10 +330,10 @@ class Edit:
             self.win.move(self.y, self.x+1)
 
     def home(self):
-        self.win.move(self.y, 0)
+        self.win.move(self.y, self.start_ch)
 
     def end(self):
-        self.win.move(self.y, self.cols)
+        self.win.move(self.y, self.cols-1)
 
     def back(self):
         if self.x > self.start_ch:
@@ -341,13 +349,13 @@ class Edit:
         self.execute = False
 
     def content(self):
-        line = self.win.instr(1,self.start_ch, curses.COLS - self.start_ch - 1).decode(encoding="utf-8")
+        line = self.win.instr(1,self.start_ch, curses.COLS - self.start_ch - 2).decode(encoding="utf-8")
         return line
 
     def key_handler(self, key):
         max_y, max_x = self.win.getmaxyx()
-        self.lines = max_y
-        self.cols = max_x
+        self.lines = max_y-1
+        self.cols = max_x-1
         y, x = self.win.getyx()
         self.y = y
         self.x = x
@@ -368,7 +376,7 @@ class Edit:
     def run(self):
         self.edit = True
         curses_edit()
-        self.win.move(1,self.start_ch)
+        self.win.move(1,self.start_ch+self.start_offset)
         while self.edit:
             self.key_handler(Key.read(self.win))
             self.win.refresh()
@@ -415,6 +423,7 @@ class Shell:
         limit = y - 2
 
         lines = self.list_bib(limit)
+        self.screen.addnstr(0, 1, ' '*(y-1), self.bib_w-1, self.color('search'))
         self.screen.addnstr(0, 1, self.search, self.bib_w-1, self.color('search'))
         self.screen.noutrefresh()
 
@@ -434,6 +443,9 @@ class Shell:
         self.display_window.erase()
         self.display_window.bkgd(' ', self.color('background'))
         y, x = self.display_window.getmaxyx()
+
+        if len(self.bib_inds) == 0:
+            return
 
         if bib_id is None:
             return
@@ -564,6 +576,7 @@ class Shell:
 
         self.cmd_history = []
         self.search = '(No search applied)'
+        self.output = ''
 
         self.use_colors = config.config['General'].getboolean('use colors')
 
@@ -598,23 +611,26 @@ class Shell:
         self.cmdwin.keypad(True)
 
         self.do_load()
-        if len(self.bibtex.entries) > 0:
+        self.draw_init()
+        self.draw_cmd()
+
+        curses.doupdate()
+
+    def draw_init(self):
+        if len(self.bib_inds) > 0:
             bid = 0
         else:
             bid = None
         self.draw_bib(bid)
         self.draw_display(bid)
-        self.draw_cmd()
-
-        curses.doupdate()
 
 
-
-    def get_command(self):
+    def get_command(self, prefill = ''):
 
         self.cmdwin.addstr(1,1,self.prompt, self.color('prompt'))
+        self.cmdwin.addstr(1,1+len(self.prompt), prefill, self.color('command'))
         curses_edit()
-        cmd_enter = Edit(self.cmdwin, self.cmd_history, len(self.prompt) + 1, self.color('command'))
+        cmd_enter = Edit(self.cmdwin, self.cmd_history, len(self.prompt) + 1, self.color('command'), start_offset = len(prefill))
         execute = cmd_enter.run()
         curses_ui()
         if execute:
@@ -627,6 +643,112 @@ class Shell:
 
 
 
+    def do_search(self, args):
+        '''Lists selected bibtex entries in database, syntax: --tag "" [field]=[regex] &/| [field]=[regex]...'''
+
+        self.search = args
+
+        tags = []
+        if len(args) > 0:
+            find_limit = args.find('--tag', 0)
+            if find_limit != -1:
+                find_space = args.find(' ', find_limit+6)
+                if find_space == -1:
+                    tags = args[(find_limit+6):].split(',')
+                    find_space = len(args)
+                else:
+                    tags = args[(find_limit+6):find_space].split(',')
+
+                args = args.replace(args[find_limit:find_space], '')
+        
+        args = args.strip()
+
+        if len(args) > 0:
+            arg_list = []
+            operators = []
+            find_ret = 0
+            find_pos = 0
+
+            while True:
+                eq_pos = args.find('=', find_pos)
+                if eq_pos == -1:
+                    break
+                key = args[find_pos:eq_pos].strip()
+                if eq_pos+1 >= len(args):
+                    arg_list.append([len(arg_list), key, ''])
+                    break
+
+                if args[eq_pos+1] in ['"', "'"]:
+                    find_pos = args.find(args[eq_pos+1], eq_pos+2)
+                    if find_pos == -1:
+                        raise Exception('No closing quotation mark on pattern')
+                    pattern = args[(eq_pos+2):find_pos]
+                    find_pos += 1
+                else:
+                    find_pos = args.find(' ', eq_pos)
+                    if find_pos == -1:
+                        find_pos = len(args)
+                    pattern = args[(eq_pos+1):find_pos]
+
+                arg_list.append([len(arg_list), key, pattern])
+
+                if find_pos+1 >= len(args):
+                    break
+                else:
+                    operators.append(args[find_pos+1])
+                    find_pos += 3
+
+            self.bib_inds = []
+            for id_,entry in enumerate(self.bibtex.entries):
+                add_ = None
+                for arg_id, key, pattern in arg_list:
+                    if key in entry:
+                        resh = re.search(pattern, str(entry[key]))
+                        if add_ is None:
+                            add_ = resh is not None
+                        else:
+                            operator = operators[arg_id-1]
+                            if operator == '&':
+                                add_ = add_ and resh is not None
+                            elif operator == '|':
+                                add_ = add_ or resh is not None
+                if add_ is None:
+                    add_ = False
+                
+                if len(tags) > 0:
+                    if 'tags' in entry:
+                        tag_ex_ = False
+                        etags = entry['tags'].split(',')
+                        for tag in tags:
+                            if tag in etags:
+                                tag_ex_ = True
+                                break
+                        add_ = add_ and tag_ex_
+                    else:
+                        add_ = False
+
+                if add_:
+                    self.bib_inds.append(id_)
+
+        else:
+            if len(tags) > 0:
+                self.bib_inds = []
+                for id_,entry in enumerate(self.bibtex.entries):
+                    tag_ex_ = False
+                    if 'tags' in entry:
+                        etags = entry['tags'].split(',')
+                        for tag in tags:
+                            if tag in etags:
+                                tag_ex_ = True
+                                break
+                    if tag_ex_:
+                        self.bib_inds.append(id_)
+
+        self.output = f'{len(self.bib_inds)} Matches'
+        self.draw_init()
+
+
+
 def run():
     prompt = Shell()
     stop = False
@@ -634,9 +756,9 @@ def run():
     try:
         while not stop:
 
-            prompt.bib_browse.run()
+            short_cmd = prompt.bib_browse.run()
 
-            text = prompt.get_command()
+            text = prompt.get_command(short_cmd)
             if len(text) > 0:
                 stop = prompt.process(text)
 
