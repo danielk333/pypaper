@@ -1,6 +1,7 @@
 import sys
 import pathlib
 import configparser
+import curses
 
 try:
     # PyXDG
@@ -32,6 +33,21 @@ DEFAULT = {
         'path': str(HOME / 'pypapers'),
         'viewer': 'okular',
         'title include': 0,
+        'use colors': True,
+        'split-size': 0.7,
+        'page-key-step': 10,
+    },
+    'Color': {
+        'background': 7,
+        'select-background': 8,
+        'text': 0,
+        'command': 4,
+        'prompt': 1,
+        'search': 1,
+        'bib-line': 0,
+        'bib-line-select': 0,
+        'bib-key': 1,
+        'bib-item': 0,
     },
     'ADS': {
         'token': 'place your personal token here',
@@ -76,17 +92,13 @@ class Color:
     def __eq__(self, other):
         return self.fg == other.fg and self.bg == other.bg
 
-bg_color = 7
-text_color = 0
-
-#todo, custom colors
 colors = {
-    'background': Color(text_color, bg_color),
-    'borders': Color(7, bg_color),
-    'text': Color(text_color, bg_color),
-    'command': Color(text_color, bg_color),
-    'prompt': Color(1, bg_color),
-    'bib-line': Color(text_color, bg_color),
-    'bib-key': Color(1, bg_color),
-    'bib-item': Color(text_color, bg_color),
+    'background': Color(config['Color'].getint('text'), config['Color'].getint('background')),
 }
+colors['text'] = colors['background']
+for key in config['Color']:
+    if key not in ['text', 'background']:
+        if key.split('-')[-1] == 'select':
+            colors[key] = Color(config['Color'].getint(key), config['Color'].getint('select-background'))
+        else:
+            colors[key] = Color(config['Color'].getint(key), config['Color'].getint('background'))

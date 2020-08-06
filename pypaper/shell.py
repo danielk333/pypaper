@@ -7,7 +7,6 @@ import subprocess
 import re
 import string
 import curses
-import curses.textpad
 
 #Third party
 import bibtexparser
@@ -27,6 +26,17 @@ except Exception:
     ads = None
 
 
+def curses_ui():
+    try:
+        curses.curs_set(0)
+    except:
+        pass
+
+def curses_edit():
+    try:
+        curses.curs_set(1)
+    except:
+        pass
 
 
 def open_viewer(path):
@@ -198,7 +208,64 @@ class Key:
 
 
 class Browse:
-    pass
+    def __init__(self, shell, index=None):
+        self.shell = shell
+        self.browse = True
+        if index is None:
+            self.index = 0
+        else:
+            self.index = index
+
+        self.ACTIONS = {
+            Key.UP: self.up,
+            Key.DOWN: self.down,
+            Key.RETURN: self.command,
+            Key.PGUP: lambda: self.up(step=config.config['General'].getint('page-key-step')),
+            Key.PGDN: lambda: self.down(step=config.config['General'].getint('page-key-step')),
+            ':': self.command,
+        }
+
+    def up(self, step=1):
+        self.index -= step
+
+        if self.index < 0:
+            self.index = 0
+
+        if self.index - self.shell.offset < 0:
+            self.shell.offset += self.index - self.shell.offset
+
+
+    def down(self, step=1):
+        self.index += step
+
+        if self.index > len(self.shell.bib_inds)-1:
+            self.index = len(self.shell.bib_inds)-1
+
+        y, x = self.shell.bib_window.getmaxyx()
+        limit = y - 2
+        if self.index - self.shell.offset >= limit:
+            self.shell.offset += self.index - self.shell.offset - limit + 1
+
+
+    def command(self):
+        self.browse = False
+
+    def key_handler(self, key):
+        strkey = str(key)
+        self.browse = True
+
+        if strkey in self.ACTIONS:
+            action = self.ACTIONS[strkey]
+            action()
+
+    def run(self):
+        self.browse = True
+        while self.browse:
+            key = Key.read(self.shell.bib_window)
+            self.key_handler(key)
+            self.shell.draw_bib(self.index)
+            self.shell.draw_display(self.index)
+        # assert 0, key
 
 
 class Edit:
@@ -209,6 +276,7 @@ class Edit:
         self.history_id = 0
         self.color = color
         self.start_ch = start_ch
+        self.execute = False
 
         self.ACTIONS = {
             Key.UP: self.load_hist_prev,
@@ -220,17 +288,19 @@ class Edit:
             Key.RETURN: self.exit,
             Key.HOME: self.home,
             Key.END: self.end,
+            Key.ESCAPE: self.escape,
         }
 
     def load_history(self):
         hist_len = len(self.history) + 1
         self.history_id = (self.history_id + hist_len) % hist_len
         y, x = self.win.getmaxyx()
-        self.win.addstr(0, self.start_ch, ' '*(x - self.start_ch), self.color)
+        self.win.addstr(1, self.start_ch, ' '*(x - self.start_ch), self.color)
 
         if self.history_id > 0:
-            self.win.addstr(0,self.start_ch,self.history[self.history_id], self.color)
-        self.win.noutrefresh()
+            self.win.addstr(1,self.start_ch,self.history[self.history_id-1], self.color)
+        else:
+            self.win.move(1,self.start_ch)
 
     def load_hist_prev(self):
         self.history_id += 1
@@ -264,10 +334,15 @@ class Edit:
 
     def exit(self):
         self.edit = False
+        self.execute = True
+
+    def escape(self):
+        self.edit = False
+        self.execute = False
 
     def content(self):
-        line = self.win.instr(0,self.start_ch, curses.COLS - self.start_ch - 1).decode(encoding="utf-8")
-        return line.strip()
+        line = self.win.instr(1,self.start_ch, curses.COLS - self.start_ch - 1).decode(encoding="utf-8")
+        return line
 
     def key_handler(self, key):
         max_y, max_x = self.win.getmaxyx()
@@ -286,21 +361,25 @@ class Edit:
             action = self.ACTIONS[strkey]
             action()
         elif not key.special:
-            self.win.addstr(y,x,strkey, self.color)
+            self.win.addstr(y, x, strkey, self.color)
             self.win.move(y, x+1)
 
 
     def run(self):
         self.edit = True
-        self.win.move(0,self.start_ch)
+        curses_edit()
+        self.win.move(1,self.start_ch)
         while self.edit:
             self.key_handler(Key.read(self.win))
+            self.win.refresh()
+        return self.execute
 
 
 
 class Shell:
 
     def __init__(self):
+        self.bib_browse = Browse(self)
         self.setup()
 
 
@@ -310,27 +389,106 @@ class Shell:
         return curses.color_pair(self._col_inds[key])
 
 
-    def draw_bib(self):
-        self.bib_window.clear()
+    def list_bib(self, limit):
+        if len(self.bib_inds) > limit:
+            display_bibtex = self.bib_inds[self.offset:(self.offset+limit)]
+        else:
+            display_bibtex = self.bib_inds
 
-        lines = self.list_bib()
+        strs_ = [None]*len(display_bibtex)
+        for id_, cid_ in enumerate(display_bibtex):
+            entry = self.bibtex.entries[cid_]
+            file_ = '   '
+            for f in self.docs:
+                if f.stem == entry["ID"]:
+                    file_ = 'pdf'
 
-        if len(lines) >= self.bib_h:
-            lines = lines[-self.bib_h:]
+            strs_[id_] = f'{cid_:<4}[{file_}]: {entry["ID"]}'
+        return strs_
+
+
+    def draw_bib(self, bib_id=None):
+        self.bib_window.erase()
+        self.bib_window.bkgd(' ', self.color('background'))
+        
+        y, x = self.bib_window.getmaxyx()
+        limit = y - 2
+
+        lines = self.list_bib(limit)
+        self.screen.addnstr(0, 1, self.search, self.bib_w-1, self.color('search'))
+        self.screen.noutrefresh()
 
         for i in range(len(lines)):
-            self.bib_window.addnstr(i, 1, lines[i], self.bib_w-2, self.color('bib-line'))
+            attrs = self.color('bib-line')
+            if bib_id is not None:
+                if bib_id - self.offset == i:
+                    attrs = self.color('bib-line-select')
+
+            self.bib_window.addnstr(i+1, 1, lines[i], self.bib_w-2, attrs)
         
         self.bib_window.border()
-        self.bib_window.noutrefresh()
+        self.bib_window.refresh()
 
 
-    def draw_display(self):
-        self.display_window.clear()
+    def draw_display(self, bib_id=None):
+        self.display_window.erase()
+        self.display_window.bkgd(' ', self.color('background'))
+        y, x = self.display_window.getmaxyx()
+
+        if bib_id is None:
+            return
+
+        entryid = self.bib_inds[bib_id]
+        entry = self.bibtex.entries[entryid]
+        row = 0
+        for i, key_ in enumerate(entry):
+            row += 1
+            key = key_ + ': '
+            if row > y-1:
+                break
+            self.display_window.addnstr(row, 1, key, x-2, self.color('bib-key'))
+            max_len = x-2-len(key)
+            entry_str = str(entry[key_])
+
+            if len(entry_str) <= max_len:
+                self.display_window.addstr(row, 1+len(key), entry_str, self.color('bib-item'))
+            else:
+                words = entry_str.split(' ')
+                wid = 0
+                item = ''
+                for wid, word in enumerate(words):
+                    if len(word) > max_len:
+                        item += word[:(max_len - len(item) - 1)] + '-'
+                        self.display_window.addstr(row, 1+len(key), item, self.color('bib-item'))
+                        row += 1
+                        item = word[(max_len - len(item) - 1):] + ' '
+                    else:
+                        if len(item) + len(word) + 1 > max_len:
+                            self.display_window.addstr(row, 1+len(key), item, self.color('bib-item'))
+                            row += 1
+                            if row > y-1:
+                                break
+                            item = ''
+                        item += word + ' '
+                if row > y-1:
+                    break
+                self.display_window.addstr(row, 1+len(key), item, self.color('bib-item'))
 
         self.display_window.border()
-        self.display_window.noutrefresh()
+        self.display_window.refresh()
 
+
+    def draw_cmd(self):
+        self.cmdwin.bkgd(' ', self.color('background'))
+
+        self.cmdwin.addstr(1,1,' '*len(self.prompt), self.color('prompt'))
+        
+        y, x = self.cmdwin.getmaxyx()
+        start_ch = 1 + len(self.prompt)
+        self.cmdwin.addstr(1, start_ch, ' '*(x - start_ch - 1), self.color('command'))
+        
+        self.cmdwin.border()
+        self.cmdwin.refresh()
 
 
     def do_quit(self, args=None):
@@ -352,13 +510,15 @@ class Shell:
         else:
             params = ''
 
+        self.precmd(cmd)
+
         if hasattr(self, func_name):
             func = getattr(self, func_name)
+            stop = func(params)
         else:
-            func = self.default
+            self.output = f"Don't understand '{cmd}'"
+            stop = False
 
-        self.precmd(cmd)
-        stop = func(params)
         self.postcmd(stop, cmd)
         return stop
 
@@ -367,6 +527,10 @@ class Shell:
 
     def postcmd(self, stop, cmd):
         self.cmd_history += [cmd]
+
+        self.screen.addnstr(0, self.bib_w, ' '*(self.display_w-1), self.display_w-1, self.color('search'))
+        self.screen.addnstr(0, self.bib_w, self.output, self.display_w-1, self.color('search'))
+
         self.cmdwin.noutrefresh()
         self.screen.noutrefresh()
         curses.doupdate()
@@ -375,40 +539,17 @@ class Shell:
     def setup_colors(self):
         self._col_inds = dict()
         for ind, key in enumerate(config.colors):
-            self._col_inds[key] = ind
-            curses.init_pair(ind, *config.colors[key].pair())
+            self._col_inds[key] = ind+1
+            curses.init_pair(ind+1, *config.colors[key].pair())
     
 
     def do_load(self, args=None):
         '''Load bibtex file and list of papers'''
         self.bibtex = bib.load_bibtex(config.BIB_FILE)
-        self.bib_inds = []
+        self.bib_inds = list(range(len(self.bibtex.entries)))
         self.docs = glob(str(config.PAPERS_FOLDER / '*.pdf'))
         self.docs = [pathlib.Path(p) for p in self.docs]
 
-
-    def list_bib(self):
-        if len(self.bib_inds) == 0:
-            if len(self.bibtex.entries) > self.limit:
-                display_bibtex = list(range(self.limit))
-            else:
-                display_bibtex = list(range(len(self.bibtex.entries)))
-        else:
-            if len(self.bib_inds) > self.limit:
-                display_bibtex = self.bib_inds[:self.limit]
-            else:
-                display_bibtex = self.bib_inds
-
-        strs_ = [None]*len(display_bibtex)
-        for id_, cid_ in enumerate(display_bibtex):
-            entry = self.bibtex.entries[cid_]
-            file_ = '   '
-            for f in self.docs:
-                if f.stem == entry["ID"]:
-                    file_ = 'pdf'
-
-            strs_[id_] = f'{id_:<4}[{file_}]: {entry["ID"]}'
-        return strs_
 
 
 
@@ -417,81 +558,72 @@ class Shell:
         self.docs = None
         self.current_docs = None
         self.current_bibtex = None
-        self.limit = 20
 
         self.prompt = ': '
+        self.offset = 0
 
         self.cmd_history = []
-        self.selection = ''
+        self.search = '(No search applied)'
 
-        self.use_colors = True
+        self.use_colors = config.config['General'].getboolean('use colors')
 
         self.screen = curses.initscr()
         curses.noecho()
-        self.screen.keypad(True)
 
-        self.cmdbox_h = 1
+        self.cmdbox_h = 3
         self.search_h = 1
-        self.output_h = 4
+        self.output_h = 1
 
         if curses.has_colors() and self.use_colors:
             curses.start_color()
-            curses.use_default_colors()
             self.setup_colors()
 
-        try:
-            curses.curs_set(1)
-        except:
-            pass
+        curses_ui()
 
-        self.screen.attrset(self.color('background'))
-        # self.screen.bkgd(' ', self.color('background'))
-        # self.screen.bkgdset(' ', self.color('background'))
+
+        self.screen.bkgd(' ', self.color('background'))
         self.screen.noutrefresh()
 
-        self.bib_h = curses.LINES - self.cmdbox_h - self.search_h - 1
-        self.bib_w = curses.COLS//2
+        self.bib_h = curses.LINES - self.cmdbox_h - self.search_h
+        self.bib_w = int(curses.COLS*config.config['General'].getfloat('split-size'))
         self.bib_window = curses.newwin(self.bib_h, self.bib_w, self.search_h, 0)
-        self.bib_window.bkgd(' ', self.color('background'))
-        
-        
-        self.display_h = curses.LINES - self.cmdbox_h - 1
-        self.display_w = curses.COLS//2
-        self.display_window = curses.newwin(self.display_h, self.display_w, 0, self.bib_w)
-        self.display_window.bkgd(' ', self.color('background'))
+        self.bib_window.keypad(True)
 
-        self.cmdwin = curses.newwin(self.cmdbox_h, curses.COLS, curses.COLS - self.cmdbox_h - 1, 0)
-        self.cmdwin.bkgd(' ', self.color('background'))
-        self.cmdwin.border()
-        self.cmdwin.addstr(0,1,self.prompt, self.color('prompt'))
-        self.cmdwin.addstr(0,1 + len(self.prompt),' '*(curses.COLS - 2 - len(self.prompt)), self.color('command'))
-        self.cmdwin.noutrefresh()
+        self.display_h = curses.LINES - self.cmdbox_h - self.output_h
+        self.display_w = curses.COLS - self.bib_w
+        self.display_window = curses.newwin(self.display_h, self.display_w, self.output_h, self.bib_w)
+        self.display_window.keypad(True)
+
+        self.cmdwin = curses.newwin(self.cmdbox_h, curses.COLS, self.bib_h + self.search_h, 0)
+        self.cmdwin.keypad(True)
 
         self.do_load()
-
-        self.draw_bib()
-        self.draw_display()
+        if len(self.bibtex.entries) > 0:
+            bid = 0
+        else:
+            bid = None
+        self.draw_bib(bid)
+        self.draw_display(bid)
+        self.draw_cmd()
 
         curses.doupdate()
 
 
+
     def get_command(self):
-        self.cmdwin.refresh()
 
+        self.cmdwin.addstr(1,1,self.prompt, self.color('prompt'))
+        curses_edit()
         cmd_enter = Edit(self.cmdwin, self.cmd_history, len(self.prompt) + 1, self.color('command'))
-        cmd_enter.run()
-        cmd = cmd_enter.content().strip()
+        execute = cmd_enter.run()
+        curses_ui()
+        if execute:
+            cmd = cmd_enter.content().strip()
+            self.draw_cmd()
+        else:
+            cmd = ''
+        self.cmdwin.addstr(1,1,' '*len(self.prompt), self.color('prompt'))
         return cmd
-        
-
-    def default(self, cmd=None):
-        self.write("Don't understand '" + cmd + "'", clear=True)
-
-
-    def write(self, line, clear=False):
-        if clear:
-            self.output = ''
-        self.output += '\n' + line
 
 
 
@@ -501,9 +633,12 @@ def run():
 
     try:
         while not stop:
+
+            prompt.bib_browse.run()
+
             text = prompt.get_command()
-            # assert 0, text
-            stop = prompt.process(text)
+            if len(text) > 0:
+                stop = prompt.process(text)
 
     except (Exception, KeyboardInterrupt) as excep:
         prompt.restore_curses()
