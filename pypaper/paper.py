@@ -44,28 +44,36 @@ class ListBib(BrowseDisplay):
         super().__init__(*args, **kwargs)
 
         self.actions[':'] = self.shell
-        self.actions['/'] = self.search
+        self.actions['/'] = lambda: self.shell('search ')
         self.actions['q'] = self.exit
+        self.actions['o'] = lambda: self.execute(f'open {self.index}')
         self.actions[Key.RETURN] = self.shell
 
-    def search(self):
-        self.data = 'shell search'
+
+    def execute(self, arg):
+        self.data = arg
         return False
 
     def exit(self):
         self.data = 'exit'
         return False
 
-    def shell(self):
-        self.data = 'shell'
+    def shell(self, arg = ''):
+        self.data = f'shell {arg}'
         return False
 
     def draw_item(self, item):
         self.display_window.border()
         y, x = self.display_window.getmaxyx()
+        y -= 1
+
+        keys = list(item.keys())
+
+        if 'ID' in keys: keys.remove('ID')
+        if 'pdf' in keys: keys.remove('pdf')
 
         row = 0
-        for i, key_ in enumerate(item.keys()):
+        for i, key_ in enumerate(keys):
             row += 1
             key = key_ + ': '
             if row > y-1:
@@ -114,6 +122,8 @@ class Pypaper(App):
         self.bibtex = None
         self.docs = None
 
+        self.search = ''
+
         self.cmdbox_h = 3
         self.search_h = 1
         self.output_h = 1
@@ -157,38 +167,82 @@ class Pypaper(App):
         )
         self.states['cmd'].clear_cmd()
 
+        for state in self.states:
+            self.states[state].actions[Key.RESIZE] = lambda: self.resize()
+
+
+
+    def draw_output(self):
+        bib_h, bib_w = self.bib_size
+        display_h, display_w = self.display_size
+        self.screen.addstr(0, bib_w, ' '*(display_w-1), self.color('output'))
+        self.screen.addnstr(0, bib_w, self.output, display_w-1, self.color('output'))
+        self.screen.refresh()
+
+    def draw_search(self):
+        bib_h, bib_w = self.bib_size
+        self.screen.addstr(0, 0, ' '*bib_w, self.color('search'))
+        self.screen.addnstr(0, 1, self.search, bib_w-1, self.color('search'))
+        self.screen.refresh()
+
+    def draw_init(self):
+        self.states['bib'].draw()
+        self.states['cmd'].draw()
+        self.draw_output()
+        curses.doupdate()
+
+    def postcmd(self, state, cmd):
+        self.draw_output()
+        super().postcmd(state, cmd)
+
 
     def resize(self):
+        if not curses.is_term_resized(self.LINES, self.COLS):
+            return
+        self.LINES, self.COLS = self.screen.getmaxyx()
+        curses.resizeterm(self.LINES, self.COLS)
+
         bib_h, bib_w = self.bib_size
-        self.states['bib'].window.mvwin(self.search_h, 0)
         self.states['bib'].window.resize(bib_h, bib_w)
+        self.states['bib'].window.mvwin(self.search_h, 0)
         
         display_h, display_w = self.display_size
-        self.states['bib'].display_window.mvwin(self.output_h, bib_w)
         self.states['bib'].display_window.resize(display_h, display_w)
+        self.states['bib'].display_window.mvwin(self.output_h, bib_w)
         
         cmd_h, cmd_w = self.cmd_size
+        self.states['cmd'].window.resize(cmd_h, cmd_w)
         self.states['cmd'].window.mvwin(bib_h + self.search_h, 0)
-        self.states['cmd'].window.resize(cmd_h, cmd_w )
+
+        self.states['bib'].draw()
+        self.states['cmd'].enter_command(self.states['cmd'].get_command())
+        self.states['cmd'].draw()
+
+        self.draw_search()
+        self.draw_output()
+        self.screen.refresh()
+        curses.doupdate()
         
 
     @property
     def cmd_size(self):
-        return self.cmdbox_h, curses.COLS
+        return self.cmdbox_h, self.COLS-1
 
     @property
     def bib_size(self):
-        bib_h = curses.LINES - self.cmdbox_h - self.search_h
-        bib_w = int(curses.COLS*config.config['General'].getfloat('split-size'))
+        bib_h = self.LINES - self.cmdbox_h - self.search_h
+        bib_w = int(self.COLS*config.config['General'].getfloat('split-size'))
         return bib_h, bib_w
 
     @property
     def display_size(self):
         bib_h, bib_w = self.bib_size
 
-        display_h = curses.LINES - self.cmdbox_h - self.output_h
-        display_w = curses.COLS - bib_w
+        display_h = self.LINES - self.cmdbox_h - self.output_h
+        display_w = self.COLS - bib_w
         return display_h, display_w
+
+    #### DO COMMANDS ####
 
     def do_load(self, args=None):
         '''Load bibtex file and list of papers'''
@@ -198,263 +252,180 @@ class Pypaper(App):
         self.docs = glob(str(config.PAPERS_FOLDER / '*.pdf'))
         self.docs = [pathlib.Path(p) for p in self.docs]
 
+        for entry in self.bibtex.entries:
+            if (config.PAPERS_FOLDER / f'{entry["ID"]}.pdf').is_file():
+                entry['pdf'] = 'pdf'
+            else:
+                entry['pdf'] = '   '
+
+        self.output = f'{len(self.bibtex.entries)} ({len(self.docs)} pdfs) bibtex entries loaded'
+
         return 'cmd'
 
+    def do_open(self, args):
+        '''Opens paper linked to bibtex entry'''
+        args = args.strip()
+        if len(args) == 0:
+            ind = self.states['bib'].index
+        else:
+            try:
+                ind = int(args)
+            except ValueError:
+                self.output = f'Cannot convert "{args}" to index'
+                return 'bib'
+
+        id_ = self.states['bib'].subset[ind]
+
+        fname = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
+        if fname.is_file():
+            open_viewer(fname)
+            return 'bib'
+        else:
+            self.output = 'No pdf linked to this entry'
+            return 'bib'
 
     def do_list(self, args):
         return 'bib'
-
 
     def do_shell(self, args):
         if len(args.strip()) > 0:
             self.states['cmd'].enter_command(args)
         return 'cmd'
 
+    def do_quit(self, args):
+        return 'exit'
 
     def do_exit(self, args):
         return 'exit'
 
+    def do_search(self, args):
+        '''Lists selected bibtex entries in database, syntax: --tag [tag] --pdf [field]=[regex] &/| [field]=[regex]...'''
 
-    # def list_bib(self, limit):
-    #     if len(self.bib_inds) > limit:
-    #         display_bibtex = self.bib_inds[self.offset:(self.offset+limit)]
-    #     else:
-    #         display_bibtex = self.bib_inds
+        self.search = args
 
-    #     strs_ = [None]*len(display_bibtex)
-    #     for id_, cid_ in enumerate(display_bibtex):
-    #         entry = self.bibtex.entries[cid_]
-    #         file_ = '   '
-    #         for f in self.docs:
-    #             if f.stem == entry["ID"]:
-    #                 file_ = 'pdf'
+        filter_pdf = False
+        if len(args) > 0:
+            find_limit = args.find('--pdf', 0)
+            if find_limit != -1:
+                args = args.replace('--pdf', '')
+                args = args.strip()
+                filter_pdf = True
 
-    #         strs_[id_] = f'{cid_:<4}[{file_}]: {entry["ID"]}'
-    #     return strs_
+        tags = []
+        if len(args) > 0:
+            find_limit = args.find('--tag', 0)
+            if find_limit != -1:
+                find_space = args.find(' ', find_limit+6)
+                if find_space == -1:
+                    tags = args[(find_limit+6):].split(',')
+                    find_space = len(args)
+                else:
+                    tags = args[(find_limit+6):find_space].split(',')
 
+                args = args.replace(args[find_limit:find_space], '')
 
-    # def draw_bib(self, bib_id=None):
-    #     self.bib_window.erase()
-    #     self.bib_window.bkgd(' ', self.color('background'))
-        
-    #     y, x = self.bib_window.getmaxyx()
-    #     limit = y - 2
+        args = args.strip()
 
-    #     lines = self.list_bib(limit)
-    #     self.screen.addnstr(0, 1, ' '*(y-1), self.bib_w-1, self.color('search'))
-    #     self.screen.addnstr(0, 1, self.search, self.bib_w-1, self.color('search'))
-    #     self.screen.noutrefresh()
+        bib_inds = None
 
-    #     for i in range(len(lines)):
-    #         attrs = self.color('bib-line')
-    #         if bib_id is not None:
-    #             if bib_id - self.offset == i:
-    #                 attrs = self.color('bib-line-select')
+        if len(args) > 0:
+            arg_list = []
+            operators = []
+            find_ret = 0
+            find_pos = 0
 
-    #         self.bib_window.addnstr(i+1, 1, lines[i], self.bib_w-2, attrs)
-        
-    #     self.bib_window.border()
-    #     self.bib_window.refresh()
+            while True:
+                eq_pos = args.find('=', find_pos)
+                if eq_pos == -1:
+                    break
+                key = args[find_pos:eq_pos].strip()
+                if eq_pos+1 >= len(args):
+                    arg_list.append([len(arg_list), key, ''])
+                    break
 
+                if args[eq_pos+1] in ['"', "'"]:
+                    find_pos = args.find(args[eq_pos+1], eq_pos+2)
+                    if find_pos == -1:
+                        raise Exception('No closing quotation mark on pattern')
+                    pattern = args[(eq_pos+2):find_pos]
+                    find_pos += 1
+                else:
+                    find_pos = args.find(' ', eq_pos)
+                    if find_pos == -1:
+                        find_pos = len(args)
+                    pattern = args[(eq_pos+1):find_pos]
 
+                arg_list.append([len(arg_list), key, pattern])
 
+                if find_pos+1 >= len(args):
+                    break
+                else:
+                    operators.append(args[find_pos+1])
+                    find_pos += 3
 
-    # def draw_cmd(self):
-    #     self.cmdwin.bkgd(' ', self.color('background'))
-
-    #     self.cmdwin.addstr(1,1,' '*len(self.prompt), self.color('prompt'))
-        
-    #     y, x = self.cmdwin.getmaxyx()
-    #     start_ch = 1 + len(self.prompt)
-    #     self.cmdwin.addstr(1, start_ch, ' '*(x - start_ch - 1), self.color('command'))
-        
-    #     self.cmdwin.border()
-    #     self.cmdwin.refresh()
-
-
-
-    # def setup(self):
-    #     self.bibtex = None
-    #     self.docs = None
-    #     self.current_docs = None
-    #     self.current_bibtex = None
-
-    #     self.prompt = ': '
-    #     self.offset = 0
-
-    #     self.cmd_history = []
-    #     self.search = '(No search applied)'
-    #     self.output = ''
-
-    #     self.use_colors = config.config['General'].getboolean('use colors')
-
-    #     self.screen = curses.initscr()
-    #     curses.noecho()
-
-    #     self.cmdbox_h = 3
-    #     self.search_h = 1
-    #     self.output_h = 1
-
-    #     if curses.has_colors() and self.use_colors:
-    #         curses.start_color()
-    #         self.setup_colors()
-
-    #     curses_ui()
-
-
-    #     self.screen.bkgd(' ', self.color('background'))
-    #     self.screen.noutrefresh()
-
-    #     self.bib_h = curses.LINES - self.cmdbox_h - self.search_h
-    #     self.bib_w = int(curses.COLS*config.config['General'].getfloat('split-size'))
-    #     self.bib_window = curses.newwin(self.bib_h, self.bib_w, self.search_h, 0)
-    #     self.bib_window.keypad(True)
-
-    #     self.display_h = curses.LINES - self.cmdbox_h - self.output_h
-    #     self.display_w = curses.COLS - self.bib_w
-    #     self.display_window = curses.newwin(self.display_h, self.display_w, self.output_h, self.bib_w)
-    #     self.display_window.keypad(True)
-
-    #     self.cmdwin = curses.newwin(self.cmdbox_h, curses.COLS, self.bib_h + self.search_h, 0)
-    #     self.cmdwin.keypad(True)
-
-    #     self.do_load()
-    #     self.draw_init()
-    #     self.draw_cmd()
-
-    #     curses.doupdate()
-
-    # def draw_init(self):
-    #     if len(self.bib_inds) > 0:
-    #         bid = 0
-    #     else:
-    #         bid = None
-    #     self.draw_bib(bid)
-    #     self.draw_display(bid)
-
-
-    # def get_command(self, prefill = ''):
-
-    #     self.cmdwin.addstr(1,1,self.prompt, self.color('prompt'))
-    #     self.cmdwin.addstr(1,1+len(self.prompt), prefill, self.color('command'))
-    #     curses_edit()
-    #     cmd_enter = Edit(self.cmdwin, self.cmd_history, len(self.prompt) + 1, self.color('command'), start_offset = len(prefill))
-    #     execute = cmd_enter.run()
-    #     curses_ui()
-    #     if execute:
-    #         cmd = cmd_enter.content().strip()
-    #         self.draw_cmd()
-    #     else:
-    #         cmd = ''
-    #     self.cmdwin.addstr(1,1,' '*len(self.prompt), self.color('prompt'))
-    #     return cmd
-
-
-
-    # def do_search(self, args):
-    #     '''Lists selected bibtex entries in database, syntax: --tag "" [field]=[regex] &/| [field]=[regex]...'''
-
-    #     parser = argparse.ArgumentParser(description='Process some integers.')
-    #     self.search = args
-
-    #     tags = []
-    #     if len(args) > 0:
-    #         find_limit = args.find('--tag', 0)
-    #         if find_limit != -1:
-    #             find_space = args.find(' ', find_limit+6)
-    #             if find_space == -1:
-    #                 tags = args[(find_limit+6):].split(',')
-    #                 find_space = len(args)
-    #             else:
-    #                 tags = args[(find_limit+6):find_space].split(',')
-
-    #             args = args.replace(args[find_limit:find_space], '')
-        
-    #     args = args.strip()
-
-    #     if len(args) > 0:
-    #         arg_list = []
-    #         operators = []
-    #         find_ret = 0
-    #         find_pos = 0
-
-    #         while True:
-    #             eq_pos = args.find('=', find_pos)
-    #             if eq_pos == -1:
-    #                 break
-    #             key = args[find_pos:eq_pos].strip()
-    #             if eq_pos+1 >= len(args):
-    #                 arg_list.append([len(arg_list), key, ''])
-    #                 break
-
-    #             if args[eq_pos+1] in ['"', "'"]:
-    #                 find_pos = args.find(args[eq_pos+1], eq_pos+2)
-    #                 if find_pos == -1:
-    #                     raise Exception('No closing quotation mark on pattern')
-    #                 pattern = args[(eq_pos+2):find_pos]
-    #                 find_pos += 1
-    #             else:
-    #                 find_pos = args.find(' ', eq_pos)
-    #                 if find_pos == -1:
-    #                     find_pos = len(args)
-    #                 pattern = args[(eq_pos+1):find_pos]
-
-    #             arg_list.append([len(arg_list), key, pattern])
-
-    #             if find_pos+1 >= len(args):
-    #                 break
-    #             else:
-    #                 operators.append(args[find_pos+1])
-    #                 find_pos += 3
-
-    #         self.bib_inds = []
-    #         for id_,entry in enumerate(self.bibtex.entries):
-    #             add_ = None
-    #             for arg_id, key, pattern in arg_list:
-    #                 if key in entry:
-    #                     resh = re.search(pattern, str(entry[key]))
-    #                     if add_ is None:
-    #                         add_ = resh is not None
-    #                     else:
-    #                         operator = operators[arg_id-1]
-    #                         if operator == '&':
-    #                             add_ = add_ and resh is not None
-    #                         elif operator == '|':
-    #                             add_ = add_ or resh is not None
-    #             if add_ is None:
-    #                 add_ = False
+            bib_inds = []
+            for id_,entry in enumerate(self.bibtex.entries):
+                add_ = None
+                for arg_id, key, pattern in arg_list:
+                    if key in entry:
+                        resh = re.search(pattern, str(entry[key]))
+                        if add_ is None:
+                            add_ = resh is not None
+                        else:
+                            operator = operators[arg_id-1]
+                            if operator == '&':
+                                add_ = add_ and resh is not None
+                            elif operator == '|':
+                                add_ = add_ or resh is not None
+                if filter_pdf:
+                    if entry['pdf'] != 'pdf':
+                        add_ = False
+                if add_ is None:
+                    add_ = False
                 
-    #             if len(tags) > 0:
-    #                 if 'tags' in entry:
-    #                     tag_ex_ = False
-    #                     etags = entry['tags'].split(',')
-    #                     for tag in tags:
-    #                         if tag in etags:
-    #                             tag_ex_ = True
-    #                             break
-    #                     add_ = add_ and tag_ex_
-    #                 else:
-    #                     add_ = False
+                if len(tags) > 0:
+                    if 'tags' in entry:
+                        tag_ex_ = False
+                        etags = entry['tags'].split(',')
+                        for tag in tags:
+                            if tag in etags:
+                                tag_ex_ = True
+                                break
+                        add_ = add_ and tag_ex_
+                    else:
+                        add_ = False
 
-    #             if add_:
-    #                 self.bib_inds.append(id_)
+                if add_:
+                    bib_inds.append(id_)
 
-    #     else:
-    #         if len(tags) > 0:
-    #             self.bib_inds = []
-    #             for id_,entry in enumerate(self.bibtex.entries):
-    #                 tag_ex_ = False
-    #                 if 'tags' in entry:
-    #                     etags = entry['tags'].split(',')
-    #                     for tag in tags:
-    #                         if tag in etags:
-    #                             tag_ex_ = True
-    #                             break
-    #                 if tag_ex_:
-    #                     self.bib_inds.append(id_)
+        else:
+            if len(tags) > 0 or filter_pdf:
+                bib_inds = []
+                for id_,entry in enumerate(self.bibtex.entries):
+                    tag_ex_ = False
+                    if 'tags' in entry:
+                        etags = entry['tags'].split(',')
+                        for tag in tags:
+                            if tag in etags:
+                                tag_ex_ = True
+                                break
+                    if len(tags) == 0:
+                        if entry['pdf'] == 'pdf':
+                            tag_ex_ = True
+                    else:
+                        if filter_pdf:
+                            if entry['pdf'] != 'pdf':
+                                tag_ex_ = False
+                    if tag_ex_:
+                        bib_inds.append(id_)
 
-    #     self.output = f'{len(self.bib_inds)} Matches'
-    #     self.draw_init()
+        
+        if bib_inds is not None:
+            self.states['bib'].subset = bib_inds
+            self.output = f'{len(bib_inds)} Matches'
+            self.states['bib'].draw()
+            self.draw_search()
+        return 'bib'
 
 
 def run():

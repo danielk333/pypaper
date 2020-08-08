@@ -36,7 +36,7 @@ DEFAULT = {
         'use colors': True,
         'split-size': 0.7,
         'page-key-step': 10,
-        'format': '{index:<4} [{year}] {author}: {title}',
+        'format': '{index:<4} {pdf} [{year}] {author}: {title}',
     },
     'Color': {
         'background': 7,
@@ -45,6 +45,7 @@ DEFAULT = {
         'command': 4,
         'prompt': 1,
         'search': 1,
+        'output': 4,
         'bib-line': 0,
         'bib-line-select': 0,
         'bib-key': 1,

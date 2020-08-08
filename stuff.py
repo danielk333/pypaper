@@ -398,19 +398,7 @@
                 id_ = int(args)
         return id_
 
-    @bib_index_arg_check
-    def do_open(self, args):
-        '''Opens paper linked to bibtex entry'''
-        id_ = self._get_bibid(args)
-        if id_ is None:
-            print('Index out of range')
-            return
 
-        fname = config.PAPERS_FOLDER / f'{self.bibtex.entries[id_]["ID"]}.pdf'
-        if fname.exists():
-            open_viewer(fname)
-        else:
-            print('No pdf linked to this entry')
 
     @bib_index_arg_check
     def do_link(self, args):
