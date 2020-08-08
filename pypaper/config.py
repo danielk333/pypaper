@@ -36,6 +36,7 @@ DEFAULT = {
         'use colors': True,
         'split-size': 0.7,
         'page-key-step': 10,
+        'format': '{index:<4} [{year}] {author}: {title}',
     },
     'Color': {
         'background': 7,
@@ -92,13 +93,16 @@ class Color:
     def __eq__(self, other):
         return self.fg == other.fg and self.bg == other.bg
 
-colors = {
-    'background': Color(config['Color'].getint('text'), config['Color'].getint('background')),
-}
-colors['text'] = colors['background']
-for key in config['Color']:
-    if key not in ['text', 'background']:
-        if key.split('-')[-1] == 'select':
-            colors[key] = Color(config['Color'].getint(key), config['Color'].getint('select-background'))
-        else:
-            colors[key] = Color(config['Color'].getint(key), config['Color'].getint('background'))
+if config['General'].getboolean('use colors'):
+    colors = {
+        'standard': Color(config['Color'].getint('text'), config['Color'].getint('background')),
+    }
+    for key in config['Color']:
+        if key not in ['text', 'background', 'select-background']:
+            if key.split('-')[-1] == 'select':
+                colors[key] = Color(config['Color'].getint(key), config['Color'].getint('select-background'))
+            else:
+                colors[key] = Color(config['Color'].getint(key), config['Color'].getint('background'))
+
+else:
+    colors = None

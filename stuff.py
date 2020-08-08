@@ -1,4 +1,27 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     @bib_index_arg_check
     def do_tag(self, args):
         id_ = self._get_bibid(args)

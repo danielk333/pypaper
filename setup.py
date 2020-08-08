@@ -23,7 +23,7 @@ setuptools.setup(
         'License :: OSI Approved :: GNU-GPLv3',
         'Operating System :: OS Independent',
     ],
-    entry_points={'console_scripts': ['pypaper=pypaper.shell:run']},
+    entry_points={'console_scripts': ['pypaper=pypaper.paper:run']},
     install_requires=pip_req,
     extras_require={'extras': opt_req},
     packages=setuptools.find_packages(),
