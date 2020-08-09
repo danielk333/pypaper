@@ -244,7 +244,7 @@ class Browse(State):
         super().__init__(window, curs_show=False)
 
         self.lst = lst
-        self.subset = list(range(len(lst)))
+        self.subset = None
         self.fmt = fmt
 
         self.formatter = UnseenFormatter()
@@ -323,6 +323,13 @@ class Browse(State):
         if self.border:
             self.window.border()
         self.window.refresh()
+
+
+    def run(self):
+        if self.subset is None:
+            self.subset = list(range(len(self.lst)))
+        return super().run()
+
 
 
 class BrowseDisplay(Browse):

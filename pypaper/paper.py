@@ -15,7 +15,7 @@ import bibtexparser
 #Local
 from . import config
 from . import bib
-from .application import App, Key, BrowseDisplay, Shell
+from .application import App, Key, BrowseDisplay, Shell, Browse
 
 try:
     from . import doc
@@ -35,6 +35,28 @@ def open_viewer(path):
         stderr=subprocess.DEVNULL,
     )
 
+class ListNewDocs(Browse):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.bib_ind_linking = None
+
+        self.actions[':'] = self.shell
+        self.actions['/'] = lambda: self.shell('search-picked-up ')
+        self.actions['o'] = lambda: self.execute(f'open-picked-up {self.index}')
+        self.actions[Key.RETURN] = lambda: self.execute(f'link-picked-up {self.index}')
+
+
+    def execute(self, arg):
+        self.data = arg
+        return False
+
+
+    def shell(self, arg = ''):
+        self.data = f'shell {arg}'
+        return False
+
+
 
 class ListBib(BrowseDisplay):
 
@@ -47,6 +69,7 @@ class ListBib(BrowseDisplay):
         self.actions['/'] = lambda: self.shell('search ')
         self.actions['q'] = self.exit
         self.actions['o'] = lambda: self.execute(f'open {self.index}')
+        self.actions['l'] = lambda: self.execute(f'link {self.index}')
         self.actions[Key.RETURN] = self.shell
 
 
@@ -167,6 +190,17 @@ class Pypaper(App):
         )
         self.states['cmd'].clear_cmd()
 
+        self.states['new_docs'] = ListNewDocs(
+            window = display_window, 
+            lst = [], 
+            fmt = '{index:<4}: {name}', 
+            color = self.color('standard'), 
+            select_color = self.color('bib-line-select'),
+            pg_step = config.config['General'].getint('page-key-step'), 
+            margin = 1, 
+            border=True,
+        )
+
         for state in self.states:
             self.states[state].actions[Key.RESIZE] = lambda: self.resize()
 
@@ -244,6 +278,87 @@ class Pypaper(App):
 
     #### DO COMMANDS ####
 
+    def do_link(self):
+        pass
+
+
+    def do_pickedup(self,args):
+        if len(self.states['new_docs'].lst) > 0:
+            self.states['new_docs'].bib_ind_linking = None
+            self.states['new_docs'].subset = list(range(len(self.states['new_docs'].lst)))
+            self.states['new_docs'].index = 1
+            self.states['new_docs'].draw()
+            return 'new_docs'
+        else:
+            return None
+
+
+    def do_docpickup(self, args):
+        '''pdf files to add to database'''
+        docs = glob(str(config.PICKUP_FOLDER / '*.pdf'))
+        docs = [pathlib.Path(p) for p in docs]
+
+        self.new_doc_paths = docs
+        self.states['new_docs'].lst = [dict(name=doc.name) for doc in docs]
+
+        return 'cmd'
+
+
+    def do_pickup(self, args):
+        '''Pickup bibtex files and pdf files to add to database'''
+
+        self.do_docpickup('')
+
+        bibs = glob(str(config.PICKUP_FOLDER / '*.bib'))
+        bibs = [pathlib.Path(p) for p in bibs]
+
+        _add = 0
+        if len(bibs) > 0:
+            b = bib.load_bibtex(bibs)
+            _skip = 0
+            bib.rename_bibtex(b)
+            #add non-duplicates
+            for in_entry in b.entries:
+                _exists = False
+                if 'title' not in in_entry:
+                    continue
+
+                for entry in self.bibtex.entries:
+                    if in_entry['ID'] == entry['ID']:
+                        _exists = True
+                    if str(in_entry['title']) == str(entry['title']):
+                        _exists = True
+
+                if not _exists:
+                    self.bibtex.entries.append(in_entry)
+                    _add += 1
+                else:
+                    _skip += 1
+
+            _add_str = 0
+            for key in b.strings:
+                if key not in self.bibtex.strings:
+                    self.bibtex.strings[key] = b.strings[key]
+                    _add_str += 1
+
+            for b_path in bibs:
+                os.rename(b_path, config.TRASH_FOLDER / b_path.name)
+
+        if len(self.states['new_docs'].lst) == 0 and len(bibs) == 0:
+            self.output = 'Pickup folder empty'
+        else:
+            self.output = f'Picked up {_add} bibs, {len(self.states["new_docs"].lst)} docs'
+            if _add > 0:
+                self.do_save('')
+        return 'cmd'
+
+
+    def do_save(self, args):
+        '''Save bibtex file'''
+        bib.save_bibtex(config.BIB_FILE, self.bibtex)
+        return 'cmd'
+
+
     def do_load(self, args=None):
         '''Load bibtex file and list of papers'''
         self.bibtex = bib.load_bibtex(config.BIB_FILE)
@@ -285,6 +400,7 @@ class Pypaper(App):
             return 'bib'
 
     def do_list(self, args):
+        self.states['bib'].draw()
         return 'bib'
 
     def do_shell(self, args):
@@ -293,9 +409,10 @@ class Pypaper(App):
         return 'cmd'
 
     def do_quit(self, args):
-        return 'exit'
+        self.do_exit()
 
     def do_exit(self, args):
+        self.do_save()
         return 'exit'
 
     def do_search(self, args):
