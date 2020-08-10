@@ -189,9 +189,23 @@ class State:
         self.actions = {
             '^C': self.interrupt,
         }
+        self.help = {
+            '^C': 'Exit application'
+        }
         self.data = None
 
+    def get_help(self):
+        hd = {}
+        for key in self.actions:
+            if key in self.help:
+                hd[key] = self.actions[key].__doc__
+            else:
+                hd[key] = ''
+        return hd
+
     def interrupt(self):
+        '''Exits the application'''
+
         self.data = 'exit'
         return False
 
@@ -226,6 +240,39 @@ class State:
             enabled = self.key_handler(key)
             self.draw()
         return self.data
+
+
+class Popup(State):
+    def __init__(self, window, content, color, border=True):
+        super().__init__(window, curs_show=False)
+        self.content = content
+        self.border = border
+        self.color = color
+
+
+    def draw_line(self, row_n, line, max_length, start_ch):
+        self.window.addnstr(row_n, start_ch, line, max_length, self.color)
+
+
+    def draw(self):
+        self.window.erase()
+        self.window.bkgd(' ', self.color)
+
+        margin = 0
+        if self.border:
+            self.window.border()
+            margin += 1
+
+        y, x = self.window.getmaxyx()
+
+        for i, line in enumerate(self.content):
+            self.draw_line(i+margin, line, x-2*margin, margin)
+
+        self.window.refresh()
+
+    def default(self, key):
+        return False
+
 
 
 class UnseenFormatter(string.Formatter):
@@ -273,11 +320,17 @@ class Browse(State):
         return y - 2*self.margin, x - 2*self.margin
 
 
+    def reset_selected(self):
+        self.offset = 0
+        self.index = 0
+
+
     def default(self, key):
         pass
 
 
     def up(self, step=1):
+        '''Previous item'''
         self.index -= step
         if self.index < 0:
             self.index = 0
@@ -286,6 +339,7 @@ class Browse(State):
 
 
     def down(self, step=1):
+        '''Next item'''
         self.index += step
         if self.index > len(self.subset)-1:
             self.index = len(self.subset)-1
@@ -327,8 +381,16 @@ class Browse(State):
 
     def run(self):
         if self.subset is None:
+            reset_subset = True
             self.subset = list(range(len(self.lst)))
-        return super().run()
+        else:
+            reset_subset = False
+
+        ret = super().run()
+
+        if reset_subset:
+            self.subset = None
+        return ret
 
 
 
@@ -346,7 +408,8 @@ class BrowseDisplay(Browse):
         super().draw()
         self.display_window.erase()
         self.display_window.bkgd(' ', self.color)
-        self.draw_item(self.lst[self.index])
+        if self.index < len(self.subset):
+            self.draw_item(self.lst[self.subset[self.index]])
         self.display_window.refresh()
 
 
@@ -371,6 +434,8 @@ class Shell(State):
 
         self.start_ch = len(self.prompt)
 
+        self.autoc_ind = None
+
         self.actions.update({
             Key.UP: self.load_hist_prev,
             Key.DOWN: self.load_hist_next,
@@ -382,7 +447,11 @@ class Shell(State):
             Key.HOME: self.home,
             Key.END: self.end,
             Key.ESCAPE: self.escape,
+            Key.TAB: self.autocomplete,
         })
+
+    def autocomplete(self):
+        pass
 
 
     def clear_cmd(self):
@@ -395,13 +464,12 @@ class Shell(State):
 
         self.window.addstr(self.prompt_line, 0, ' '*x, self.command_color)
         self.window.addstr(self.prompt_line, 0, self.prompt, self.prompt_color)
-        self.window.refresh()
 
 
     def enter_command(self, cmd):
         self.clear_cmd()
         y,x = self.window.getmaxyx()
-        self.window.addnstr(self.prompt_line, self.start_ch, cmd, y-self.start_ch-1, self.command_color)
+        self.window.addnstr(self.prompt_line, self.start_ch, cmd, x-self.start_ch-1, self.command_color)
         self.draw()
 
 
@@ -422,23 +490,26 @@ class Shell(State):
             self.window.move(self.prompt_line,self.start_ch)
 
 
-
     def load_hist_prev(self):
         self.history_id += 1
         self.load_history()
+
 
     def load_hist_next(self):
         if self.history_id > 0:
             self.history_id -= 1
             self.load_history()
 
+
     def delete(self):
         self.window.delch()
+
 
     def prev(self):
         _, x = self.window.getyx()
         if x > self.start_ch:
             self.window.move(self.prompt_line, x-1)
+
 
     def next(self):
         _, xmax = self.window.getmaxyx()
@@ -446,12 +517,15 @@ class Shell(State):
         if x < xmax-1:
             self.window.move(self.prompt_line, x+1)
 
+
     def home(self):
         self.window.move(self.prompt_line, self.start_ch)
+
 
     def end(self):
         cmd = self.get_command()
         self.window.move(self.prompt_line, self.start_ch + len(cmd) - 1)
+
 
     def back(self):
         y, x = self.window.getyx()
@@ -459,29 +533,35 @@ class Shell(State):
             self.window.move(self.prompt_line, x-1)
             self.window.delch()
 
+
     def execute(self):
         self.data = self.get_command()
-        self.history.insert(0, self.data)
+        if len(self.data) > 0:
+            self.history.insert(0, self.data)
         if self.history_max is not None:
             if len(self.history) > self.history_max:
                 self.history = self.history[1:]
         self.clear_cmd()
         return False
 
+
     def escape(self):
         self.data = ''
         return False
+
 
     def get_command(self):
         y, x = self.window.getmaxyx()
         cmd = self.window.instr(self.prompt_line,self.start_ch, x - self.start_ch - 1).decode(encoding="utf-8")
         return cmd.strip()
 
+
     def default(self, key):
         if not key.special:
             y, x = self.window.getyx()
             self.window.addstr(y, x, str(key), self.command_color)
             self.window.move(y, x+1)
+
 
     def run(self):
         cmd = self.get_command().strip()
@@ -549,6 +629,8 @@ class App:
             func_name = 'do_' + _cmd
             params = ''
 
+        func_name = func_name.replace('-','_')
+
         self.precmd(cmd)
 
         if hasattr(self, func_name):
@@ -568,6 +650,11 @@ class App:
 
     def postcmd(self, state, cmd):
         pass
+
+
+    def list_commands(self):
+        lst = dir(self)
+        return [mth for mth in lst if mth.startswith('do_')]
 
 
     def draw_init(self):

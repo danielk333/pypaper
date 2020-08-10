@@ -8,6 +8,7 @@ import re
 import string
 import curses
 import argparse
+import json
 
 #Third party
 import bibtexparser
@@ -15,7 +16,7 @@ import bibtexparser
 #Local
 from . import config
 from . import bib
-from .application import App, Key, BrowseDisplay, Shell, Browse
+from .application import App, Key, BrowseDisplay, Shell, Browse, Popup
 
 try:
     from . import doc
@@ -45,6 +46,12 @@ class ListNewDocs(Browse):
         self.actions['/'] = lambda: self.shell('search-picked-up ')
         self.actions['o'] = lambda: self.execute(f'open-picked-up {self.index}')
         self.actions[Key.RETURN] = lambda: self.execute(f'link-picked-up {self.index}')
+        self.actions[Key.ESCAPE] = self.esc
+
+
+    def esc(self):
+        self.data = 'list'
+        return False
 
 
     def execute(self, arg):
@@ -56,6 +63,22 @@ class ListNewDocs(Browse):
         self.data = f'shell {arg}'
         return False
 
+
+class Help(Popup):
+    def __init__(self, *args, **kwargs):
+        self.action_color = kwargs.pop('action_color')
+        super().__init__(*args, **kwargs)
+        self.content = [x for x in self.content if x[0] != '<resize>']
+        self.key_size = max([len(x[0]) for x in self.content])
+
+    def draw_line(self, row_n, line, max_length, start_ch):
+        action, help_str = line
+        if action.startswith('^'):
+            action = 'Ctrl+' + action[1:]
+        action = action.replace('<', '').replace('>', '')
+        action = f'{action:<{self.key_size}} '
+        self.window.addnstr(row_n, start_ch, action, max_length, self.action_color)
+        self.window.addnstr(row_n, start_ch+len(action), help_str, max_length-len(action), self.color)
 
 
 class ListBib(BrowseDisplay):
@@ -139,6 +162,29 @@ class ListBib(BrowseDisplay):
 
 class Pypaper(App):
 
+    def load_state(self):
+        if not config.DATA_FILE.is_file():
+            return 
+        with open(config.DATA_FILE, 'r') as f:
+            data = json.load(f)
+            self.states['cmd'].history = data['history']
+            self.search = data['search']
+            self.states['bib'].subset = data['search-results']
+            if self.states['bib'].subset is None:
+                self.states['bib'].subset = list(range(len(self.bibtex.entries)))
+
+
+    def save_state(self):
+        hmax = config.config['General'].getint('save-history')
+        with open(config.DATA_FILE, 'w') as f:
+            data = {
+                'history': self.states['cmd'].history[:hmax],
+                'search': self.search,
+                'search-results': self.states['bib'].subset,
+            }
+            json.dump(data, f)
+
+
     def __init__(self, colors):
         super().__init__(colors)
 
@@ -150,6 +196,8 @@ class Pypaper(App):
         self.cmdbox_h = 3
         self.search_h = 1
         self.output_h = 1
+
+        self.new_doc_paths = []
 
         bib_h, bib_w = self.bib_size
         bib_window = curses.newwin(bib_h, bib_w, self.search_h, 0)
@@ -188,7 +236,6 @@ class Pypaper(App):
             border=True, 
             prompt_line = 1,
         )
-        self.states['cmd'].clear_cmd()
 
         self.states['new_docs'] = ListNewDocs(
             window = display_window, 
@@ -204,6 +251,11 @@ class Pypaper(App):
         for state in self.states:
             self.states[state].actions[Key.RESIZE] = lambda: self.resize()
 
+        self.states['bib'].actions['h'] = lambda: self.help_state('bib')
+        self.states['new_docs'].actions['h'] = lambda: self.help_state('new_docs')
+
+        self.load_state()
+        self.do_docpickup()
 
 
     def draw_output(self):
@@ -221,8 +273,10 @@ class Pypaper(App):
 
     def draw_init(self):
         self.states['bib'].draw()
+        self.states['cmd'].clear_cmd()
         self.states['cmd'].draw()
         self.draw_output()
+        self.draw_search()
         curses.doupdate()
 
     def postcmd(self, state, cmd):
@@ -250,7 +304,6 @@ class Pypaper(App):
 
         self.states['bib'].draw()
         self.states['cmd'].enter_command(self.states['cmd'].get_command())
-        self.states['cmd'].draw()
 
         self.draw_search()
         self.draw_output()
@@ -276,24 +329,77 @@ class Pypaper(App):
         display_w = self.COLS - bib_w
         return display_h, display_w
 
+
+    def help_state(self, state):
+        help_dict = self.states[state].get_help()
+        max_len = max([len(key) for key in help_dict])
+        help_screen = Help(
+            window = self.states['bib'].display_window, 
+            content = list(help_dict.items()),
+            color = self.color('bib-item'), 
+            action_color = self.color('bib-key'), 
+            border = True,
+        )
+        help_screen.data = state
+        help_screen.draw()
+        key = Key.read(help_screen.window)
+        del help_screen
+        self.states[state].draw()
+
+
+
     #### DO COMMANDS ####
 
-    def do_link(self):
-        pass
+    def do_link(self, args):
+        if len(self.states['new_docs'].lst) == 0:
+            self.output = 'No PDFs picked up'
+            return 'bib'
+        self.prepare_picked_up(link=int(args))
+        return 'new_docs'
+
+    def do_link_picked_up(self, args):
+        if self.states['new_docs'].bib_ind_linking is None:
+            self.output = 'No bibtex entry chosen, PDF not linked'
+            return None
+
+        fname = f'{self.bibtex.entries[self.states["new_docs"].bib_ind_linking]["ID"]}.pdf'
+        new_path = config.PAPERS_FOLDER / fname
+        if new_path.is_file():
+            new_path.unlink()
+
+        doc_ind = int(args)
+
+        os.rename(self.new_doc_paths[doc_ind], new_path)
+        del self.new_doc_paths[doc_ind]
+        self.output = f'{new_path.name} added to paper database'
+
+        self.docs.append(new_path)
+        self.bibtex.entries[self.states["new_docs"].bib_ind_linking]['pdf'] = 'pdf'
+
+        self.states['bib'].draw()
+
+        return 'bib'
+
+
+    def prepare_picked_up(self, link=None):
+        if link is not None:
+            self.states['new_docs'].bib_ind_linking = self.states['bib'].subset[link]
+        else:
+            self.states['new_docs'].bib_ind_linking = None
+        self.states['new_docs'].subset = list(range(len(self.states['new_docs'].lst)))
+        self.states['new_docs'].index = 1
+        self.states['new_docs'].draw()
 
 
     def do_pickedup(self,args):
         if len(self.states['new_docs'].lst) > 0:
-            self.states['new_docs'].bib_ind_linking = None
-            self.states['new_docs'].subset = list(range(len(self.states['new_docs'].lst)))
-            self.states['new_docs'].index = 1
-            self.states['new_docs'].draw()
+            self.prepare_picked_up()
             return 'new_docs'
         else:
             return None
 
 
-    def do_docpickup(self, args):
+    def do_docpickup(self, args=None):
         '''pdf files to add to database'''
         docs = glob(str(config.PICKUP_FOLDER / '*.pdf'))
         docs = [pathlib.Path(p) for p in docs]
@@ -307,7 +413,7 @@ class Pypaper(App):
     def do_pickup(self, args):
         '''Pickup bibtex files and pdf files to add to database'''
 
-        self.do_docpickup('')
+        self.do_docpickup()
 
         bibs = glob(str(config.PICKUP_FOLDER / '*.bib'))
         bibs = [pathlib.Path(p) for p in bibs]
@@ -330,6 +436,10 @@ class Pypaper(App):
                         _exists = True
 
                 if not _exists:
+                    if (config.PAPERS_FOLDER / f'{in_entry["ID"]}.pdf').is_file():
+                        in_entry['pdf'] = 'pdf'
+                    else:
+                        in_entry['pdf'] = '   '
                     self.bibtex.entries.append(in_entry)
                     _add += 1
                 else:
@@ -353,10 +463,18 @@ class Pypaper(App):
         return 'cmd'
 
 
-    def do_save(self, args):
+    def do_save(self, args=None):
         '''Save bibtex file'''
         bib.save_bibtex(config.BIB_FILE, self.bibtex)
         return 'cmd'
+
+
+    def refresh_docs(self):
+        for entry in self.bibtex.entries:
+            if (config.PAPERS_FOLDER / f'{entry["ID"]}.pdf').is_file():
+                entry['pdf'] = 'pdf'
+            else:
+                entry['pdf'] = '   '
 
 
     def do_load(self, args=None):
@@ -367,15 +485,31 @@ class Pypaper(App):
         self.docs = glob(str(config.PAPERS_FOLDER / '*.pdf'))
         self.docs = [pathlib.Path(p) for p in self.docs]
 
-        for entry in self.bibtex.entries:
-            if (config.PAPERS_FOLDER / f'{entry["ID"]}.pdf').is_file():
-                entry['pdf'] = 'pdf'
-            else:
-                entry['pdf'] = '   '
+        self.refresh_docs()
 
         self.output = f'{len(self.bibtex.entries)} ({len(self.docs)} pdfs) bibtex entries loaded'
 
         return 'cmd'
+
+
+    def do_open_picked_up(self, args):
+        '''Opens un-linked paper in pickup folder'''
+        args = args.strip()
+        if len(args) == 0:
+            ind = self.states['new_docs'].index
+        else:
+            try:
+                ind = int(args)
+            except ValueError:
+                self.output = f'Cannot convert "{args}" to index'
+                return 'bib'
+
+        id_ = self.states['new_docs'].subset[ind]
+
+        open_viewer(self.new_doc_paths[id_])
+        return 'new_docs'
+
+
 
     def do_open(self, args):
         '''Opens paper linked to bibtex entry'''
@@ -412,6 +546,7 @@ class Pypaper(App):
         self.do_exit()
 
     def do_exit(self, args):
+        self.save_state()
         self.do_save()
         return 'exit'
 
@@ -419,6 +554,12 @@ class Pypaper(App):
         '''Lists selected bibtex entries in database, syntax: --tag [tag] --pdf [field]=[regex] &/| [field]=[regex]...'''
 
         self.search = args
+        if len(args.strip()) == 0:
+            self.states['bib'].subset = list(range(len(self.bibtex.entries)))
+            self.output = f'Listing all entries'
+            self.states['bib'].draw()
+            self.draw_search()
+            return 'bib'
 
         filter_pdf = False
         if len(args) > 0:
@@ -539,6 +680,7 @@ class Pypaper(App):
         
         if bib_inds is not None:
             self.states['bib'].subset = bib_inds
+            self.states['bib'].reset_selected()
             self.output = f'{len(bib_inds)} Matches'
             self.states['bib'].draw()
             self.draw_search()

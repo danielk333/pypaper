@@ -37,6 +37,7 @@ DEFAULT = {
         'split-size': 0.7,
         'page-key-step': 10,
         'format': '{index:<4} {pdf} [{year}] {author}: {title}',
+        'save-history': 10,
     },
     'Color': {
         'background': 7,
@@ -70,6 +71,7 @@ PICKUP_FOLDER = DATA_FOLDER / 'PICKUP'
 BIB_FILE = DATA_FOLDER / 'references.bib'
 PAPERS_FOLDER = DATA_FOLDER / 'PAPERS'
 TRASH_FOLDER = DATA_FOLDER / 'TRASH'
+DATA_FILE = DATA_FOLDER / 'data.dat'
 
 DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 
