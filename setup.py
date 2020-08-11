@@ -15,7 +15,7 @@ with open('optional_requirements', 'r') as fh:
 
 setuptools.setup(
     name='pypaper',
-    version='0.3.0',
+    version='0.6.0',
     long_description=long_description,
     url='https://github.com/danielk333/pypaper',
     classifiers=[
