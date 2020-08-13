@@ -93,6 +93,7 @@ class ListBib(BrowseDisplay):
         self.actions['q'] = self.exit
         self.actions['o'] = lambda: self.execute(f'open {self.index}')
         self.actions['l'] = lambda: self.execute(f'link {self.index}')
+        self.actions['c'] = lambda: self.execute(f'clip {self.index}')
         self.actions[Key.RETURN] = self.shell
 
 
@@ -349,6 +350,19 @@ class Pypaper(App):
 
 
     #### DO COMMANDS ####
+
+    def do_clip(self, args):
+        '''Copy bibtex entry to clipboard'''
+        entry = self.bibtex.entries[self.states['bib'].subset[int(args)]]
+
+        bib_database = bibtexparser.bibdatabase.BibDatabase()
+        bib_database.entries = [entry]
+
+        data = bibtexparser.dumps(bib_database)
+        cmd = ['xsel','-b','-i']
+        subprocess.run(cmd, universal_newlines=True, input=data)
+        self.output = 'Copied bibtex entry to clipboard'
+
 
     def do_link(self, args):
         if len(self.states['new_docs'].lst) == 0:
