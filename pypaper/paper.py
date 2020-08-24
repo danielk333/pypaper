@@ -92,9 +92,19 @@ class ListBib(BrowseDisplay):
         self.actions['/'] = lambda: self.shell('search ')
         self.actions['q'] = self.exit
         self.actions['o'] = lambda: self.execute(f'open {self.index}')
+        self.actions['d'] = self.remove_item
         self.actions['l'] = lambda: self.execute(f'link {self.index}')
         self.actions['c'] = lambda: self.execute(f'clip {self.index}')
         self.actions[Key.RETURN] = self.shell
+
+        self.help[':'] = 'Enter command mode'
+        self.help['/'] = 'Enter search'
+        self.help['q'] = 'Exit application'
+        self.help['o'] = 'Open PDF'
+        self.help['d'] = 'Remove item from selection'
+        self.help['l'] = 'Link bibtex entry to picked up PDF'
+        self.help['c'] = 'Copy bibtex entry to clipboard'
+        self.help[Key.RETURN] = 'Enter command mode'
 
 
     def execute(self, arg):
@@ -108,6 +118,13 @@ class ListBib(BrowseDisplay):
     def shell(self, arg = ''):
         self.data = f'shell {arg}'
         return False
+
+    def remove_item(self):
+        del self.subset[self.index]
+        if self.index >= len(self.subset):
+            self.index = len(self.subset) - 1
+        return True
+
 
     def draw_item(self, item):
         self.display_window.border()
@@ -255,6 +272,9 @@ class Pypaper(App):
         self.states['bib'].actions['h'] = lambda: self.help_state('bib')
         self.states['new_docs'].actions['h'] = lambda: self.help_state('new_docs')
 
+        self.states['bib'].help['h'] = 'Display help'
+        self.states['new_docs'].help['h'] = 'Display help'
+
         self.load_state()
         self.do_docpickup()
 
@@ -362,6 +382,29 @@ class Pypaper(App):
         cmd = ['xsel','-b','-i']
         subprocess.run(cmd, universal_newlines=True, input=data)
         self.output = 'Copied bibtex entry to clipboard'
+
+
+    def do_export(self, args):
+        if len(args) == 0:
+            fout = None
+        else:
+            fout = pathlib.Path(args)
+
+        bib_database = bibtexparser.bibdatabase.BibDatabase()
+        bib_database.entries = []
+        for ind in self.states['bib'].subset:
+            bib_database.entries.append(self.bibtex.entries[ind])
+
+        data = bibtexparser.dumps(bib_database)
+        if fout is None:
+            cmd = ['xsel','-b','-i']
+            subprocess.run(cmd, universal_newlines=True, input=data)
+            self.output = 'Copied bibtex list to clipboard'
+        else:
+            with open(fout, 'w') as f:
+                f.write(data)
+            self.output = f'Wrote bibtex list to {str(fout)}'
+
 
 
     def do_link(self, args):

@@ -198,6 +198,8 @@ class State:
         hd = {}
         for key in self.actions:
             if key in self.help:
+                hd[key] = self.help[key]
+            elif self.actions[key].__doc__ is not None:
                 hd[key] = self.actions[key].__doc__
             else:
                 hd[key] = ''
@@ -312,6 +314,12 @@ class Browse(State):
             Key.PGUP: lambda: self.up(step=self.pg_step),
             Key.PGDN: lambda: self.down(step=self.pg_step),
         })
+
+        self.help[Key.UP] = 'Previous item'
+        self.help[Key.DOWN] = 'Next item'
+        self.help[Key.RETURN] = 'Exit Browse'
+        self.help[Key.PGUP] = f'Step {self.pg_step} items up'
+        self.help[Key.PGDN] = f'Step {self.pg_step} items down'
 
 
     @property
