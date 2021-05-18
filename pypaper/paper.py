@@ -371,6 +371,34 @@ class Pypaper(App):
 
     #### DO COMMANDS ####
 
+    def do_help(self, args):
+        help_dict = {}
+        for attr in dir(self):
+            if len(args) == 0:
+                if attr.startswith('do_'):
+                    h_ = getattr(self, attr).__doc__
+                    if h_ is None:
+                        h_ = 'No help found'
+                    help_dict[attr[3:]] = h_.split('\n')[0]
+            else:
+                if attr.startswith('do_'):
+                    if attr[3:] == args:
+                        help_dict[attr[3:]] = getattr(self, attr).__doc__
+
+        help_screen = Help(
+            window = self.states['bib'].display_window, 
+            content = list(help_dict.items()),
+            color = self.color('bib-item'), 
+            action_color = self.color('bib-key'), 
+            border = True,
+        )
+        help_screen.data = 'cmd'
+        help_screen.draw()
+        key = Key.read(help_screen.window)
+        del help_screen
+        self.states['bib'].draw()
+        self.states['cmd'].draw()
+
     def do_clip(self, args):
         '''Copy bibtex entry to clipboard'''
         entry = self.bibtex.entries[self.states['bib'].subset[int(args)]]
